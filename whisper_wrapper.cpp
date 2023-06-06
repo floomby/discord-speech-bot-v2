@@ -121,7 +121,8 @@ class ASRUnit : public std::enable_shared_from_this<ASRUnit> {
     wparams.single_segment   = true;
     wparams.max_tokens       = 512;
     wparams.language         = "en";
-    wparams.n_threads        = std::max(1u, std::thread::hardware_concurrency() - 1);
+    // wparams.n_threads        = std::max(1u, std::thread::hardware_concurrency() - 1);
+    wparams.n_threads        = 2;
 
     wparams.audio_ctx        = 0;
     wparams.speed_up         = false;

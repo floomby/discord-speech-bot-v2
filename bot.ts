@@ -7,6 +7,8 @@ import { Client, GatewayIntentBits, ChannelType } from "discord.js";
 import { OpusEncoder } from "@discordjs/opus";
 import { Transform, Writable } from "stream";
 import dotenv from "dotenv";
+import { initTTS, playText } from "./tts";
+import { exec, spawn } from "child_process";
 
 dotenv.config();
 
@@ -24,6 +26,8 @@ const client = new Client({
 });
 
 const ASRUnits = new Map<string, any>();
+
+initTTS();
 
 client.on("ready", () => {
   console.log("Client ready!");
@@ -62,6 +66,10 @@ client.on("ready", () => {
           receiver.speaking.on("start", async (userID) => {
             const callback = (...args) => {
               console.log(args);
+              if (args[0].length > 15) {
+                console.log("sending text to tts");
+                playText(args[0], connection);
+              }
             };
 
             let whisper = ASRUnits.get(userID);
