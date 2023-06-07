@@ -1,0 +1,28 @@
+diff --git a/TTS/utils/synthesizer.py b/TTS/utils/synthesizer.py
+index 5422a0b6..7dc4c68d 100644
+--- a/TTS/utils/synthesizer.py
++++ b/TTS/utils/synthesizer.py
+@@ -257,6 +257,7 @@ class Synthesizer(object):
+         style_text=None,
+         reference_wav=None,
+         reference_speaker_name=None,
++        bypass_sentencization: bool = True,
+         **kwargs,
+     ) -> List[int]:
+         """🐸 TTS magic. Run all the models and generate speech.
+@@ -282,9 +283,12 @@ class Synthesizer(object):
+             )
+ 
+         if text:
+-            sens = self.split_into_sentences(text)
+-            print(" > Text splitted to sentences.")
+-            print(sens)
++            if not bypass_sentencization:
++                sens = self.split_into_sentences(text)
++                print(" > Text splitted to sentences.")
++                print(sens)
++            else:
++                sens = [text]
+ 
+         # handle multi-speaker
+         if "voice_dir" in kwargs:
