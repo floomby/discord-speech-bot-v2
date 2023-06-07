@@ -26,42 +26,22 @@ void high_pass_filter(std::vector<float> & data, float cutoff, float sample_rate
   }
 }
 
-bool vad_simple(std::vector<float> & pcmf32, int sample_rate, int last_ms, float vad_thold, float freq_thold, bool verbose) {
-  const int n_samples      = pcmf32.size();
-  const int n_samples_last = (sample_rate * last_ms) / 1000;
-
-  if (n_samples_last >= n_samples) {
-    // not enough samples - assume no speech
-    return false;
-  }
-
+bool vad(std::vector<float> & pcmf32, int sample_rate, int unprocessedSamples, float vad_thold, float freq_thold) {
   if (freq_thold > 0.0f) {
     high_pass_filter(pcmf32, freq_thold, sample_rate);
   }
 
   float energy_all  = 0.0f;
-  float energy_last = 0.0f;
+
+  int n_samples = std::min((size_t)unprocessedSamples, pcmf32.size());
 
   for (int i = 0; i < n_samples; i++) {
     energy_all += fabsf(pcmf32[i]);
-
-    if (i >= n_samples - n_samples_last) {
-      energy_last += fabsf(pcmf32[i]);
-    }
   }
 
-  energy_all  /= n_samples;
-  energy_last /= n_samples_last;
+  energy_all /= n_samples;
 
-  if (verbose) {
-    fprintf(stderr, "%s: energy_all: %f, energy_last: %f, vad_thold: %f, freq_thold: %f\n", __func__, energy_all, energy_last, vad_thold, freq_thold);
-  }
-
-  if (energy_last > vad_thold*energy_all) {
-    return false;
-  }
-
-  return true;
+  return energy_all > vad_thold;
 }
 
 struct Params {
@@ -77,8 +57,8 @@ struct Workload {
 
 const static int n_samples_30s = WHISPER_SAMPLE_RATE * 30;
 const static int n_samples_overlap_desired = WHISPER_SAMPLE_RATE * 0.2;
-const static float vad_threshold = 0.3f;
-const static float freq_threshold = 250.0f;
+const static float vad_threshold = 0.03f;
+const static float freq_threshold = 0.0f;
 
 class ASRUnit : public std::enable_shared_from_this<ASRUnit> {
   static struct whisper_context *ctx;
@@ -96,6 +76,10 @@ class ASRUnit : public std::enable_shared_from_this<ASRUnit> {
   }
 
   static void runWhisperOnUnit(std::shared_ptr<ASRUnit> unit) {
+    if (unit->unprocessedSamples < n_samples_overlap_desired) {
+      return;
+    }
+
     std::vector<float> inference_buffer(n_samples_30s, 0.0f);
 
     const int samples_to_copy = std::min(n_samples_30s, unit->unprocessedSamples + n_samples_overlap_desired);
@@ -105,7 +89,7 @@ class ASRUnit : public std::enable_shared_from_this<ASRUnit> {
     std::copy(unit->pcmf32.end() - samples_to_copy, unit->pcmf32.end(), inference_buffer.begin());
 
     // run vad on the inference buffer
-    const bool is_speech = vad_simple(inference_buffer, WHISPER_SAMPLE_RATE, 1000, 0.6f, 100.0f, false);
+    const bool is_speech = vad(inference_buffer, WHISPER_SAMPLE_RATE, 1000, vad_threshold, freq_threshold);
 
     if (!is_speech) {
       return;
@@ -161,12 +145,14 @@ class ASRUnit : public std::enable_shared_from_this<ASRUnit> {
   static void runWhisper() {
     while (running) {
       std::vector<Workload> workloads;
+      bool didWork = false;
 
       {
         std::lock_guard<std::mutex> lock(workQueueMutex);
         while (!workQueue.empty()) {
           workloads.push_back(workQueue.front());
           workQueue.pop();
+          didWork = true;
         }
       }
 
@@ -212,6 +198,10 @@ class ASRUnit : public std::enable_shared_from_this<ASRUnit> {
           }
         }
         runWhisperOnUnit(unit);
+      }
+
+      if (!didWork) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
       }
     }
   }

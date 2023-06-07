@@ -8,7 +8,8 @@ import { OpusEncoder } from "@discordjs/opus";
 import { Transform, Writable } from "stream";
 import dotenv from "dotenv";
 import { initTTS, playText } from "./tts";
-import { exec, spawn } from "child_process";
+import { QuiescenceMonitor } from "./quiescenceMonitor";
+import { initPrompting, interumPrompt, finalPrompt } from "./prompting";
 
 dotenv.config();
 
@@ -27,7 +28,28 @@ const client = new Client({
 
 const ASRUnits = new Map<string, any>();
 
+const utterances = new Map<string, QuiescenceMonitor<string>>();
+
+const conversation: {
+  who: string;
+  utterance: string;
+  time: Date;
+}[] = [];
+
+const utteranceCallbackBuilder = (id: string, name: string, player: (textToPlay: string) => void) => async (text: string[]) => {
+  const fullText = text.join(" ");
+  console.log(`Utterance ${id} received: ${fullText}`);
+  conversation.push({
+    who: name,
+    utterance: fullText,
+    time: new Date()
+  });
+  const response = await finalPrompt(fullText);
+  player(response);
+};
+
 initTTS();
+initPrompting();
 
 client.on("ready", () => {
   console.log("Client ready!");
@@ -64,11 +86,23 @@ client.on("ready", () => {
 
           const encoder = new OpusEncoder(16000, 1);
           receiver.speaking.on("start", async (userID) => {
+            let utterance = utterances.get(userID);
+
+            if (!utterance) {
+              const userName = client.users.cache.get(userID)?.username ?? "<unknown>";
+
+              utterance = new QuiescenceMonitor<string>(
+                3000,
+                utteranceCallbackBuilder(userID, userName, (text) => playText(text, connection)),
+                (val: string) => /charlie/i.test(val)
+              );
+              utterances.set(userID, utterance);
+            }
+
             const callback = (...args) => {
-              console.log(args);
-              if (args[0].length > 15) {
-                console.log("sending text to tts");
-                playText(args[0], connection);
+              utterance.activity(args[0] as string);
+              if (utterance.hot) {
+                interumPrompt(utterance.acm);
               }
             };
 
