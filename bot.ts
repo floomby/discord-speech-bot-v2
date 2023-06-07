@@ -7,9 +7,19 @@ import { Client, GatewayIntentBits, ChannelType } from "discord.js";
 import { OpusEncoder } from "@discordjs/opus";
 import { Transform, Writable } from "stream";
 import dotenv from "dotenv";
-import { initTTS, playText } from "./tts";
+import {
+  TTSDispatcher,
+  initTTS,
+  connection as ttsConnection,
+  setConnection as setTTSConnection,
+} from "./tts";
 import { QuiescenceMonitor } from "./quiescenceMonitor";
-import { initPrompting, interumPrompt, finalPrompt } from "./prompting";
+import {
+  initPrompting,
+  interimPrompt,
+  finalPrompt,
+  ConversationContext,
+} from "./prompting";
 
 dotenv.config();
 
@@ -36,17 +46,32 @@ const conversation: {
   time: Date;
 }[] = [];
 
-const utteranceCallbackBuilder = (id: string, name: string, player: (textToPlay: string) => void) => async (text: string[]) => {
-  const fullText = text.join(" ");
-  console.log(`Utterance ${id} received: ${fullText}`);
-  conversation.push({
-    who: name,
-    utterance: fullText,
-    time: new Date()
-  });
-  const response = await finalPrompt(fullText);
-  player(response);
-};
+const utteranceCallbackBuilder =
+  (
+    id: string,
+    name: string,
+    player: (textToPlay: string) => void,
+    conversationContext: ConversationContext
+  ) =>
+  async (text: string[]) => {
+    const fullText = text.join(" ");
+    console.log(`Utterance ${id} received: ${fullText}`);
+    conversation.push({
+      who: name,
+      utterance: fullText,
+      time: new Date(),
+    });
+
+    const dispatcher = new TTSDispatcher();
+
+    const response = await finalPrompt(
+      fullText,
+      dispatcher,
+      conversationContext
+    );
+    // player(response);
+    return response;
+  };
 
 initTTS();
 initPrompting();
@@ -82,6 +107,9 @@ client.on("ready", () => {
         const { receiver } = connection;
 
         connection.on(VoiceConnectionStatus.Ready, () => {
+          if (ttsConnection !== connection) {
+            setTTSConnection(connection);
+          }
           console.log("audio connection ready");
 
           const encoder = new OpusEncoder(16000, 1);
@@ -89,11 +117,21 @@ client.on("ready", () => {
             let utterance = utterances.get(userID);
 
             if (!utterance) {
-              const userName = client.users.cache.get(userID)?.username ?? "<unknown>";
+              const userName =
+                client.users.cache.get(userID)?.username ?? "<unknown>";
 
               utterance = new QuiescenceMonitor<string>(
-                3000,
-                utteranceCallbackBuilder(userID, userName, (text) => playText(text, connection)),
+                2000,
+                utteranceCallbackBuilder(
+                  userID,
+                  userName,
+                  (text) => console.log(`Playing ${text}`),
+                  {
+                    usersInChannel: channel.members.map(
+                      (member) => member.user.username
+                    ),
+                  }
+                ),
                 (val: string) => /charlie/i.test(val)
               );
               utterances.set(userID, utterance);
@@ -102,7 +140,7 @@ client.on("ready", () => {
             const callback = (...args) => {
               utterance.activity(args[0] as string);
               if (utterance.hot) {
-                interumPrompt(utterance.acm);
+                interimPrompt(utterance.acm);
               }
             };
 
@@ -134,6 +172,7 @@ client.on("ready", () => {
             audio.on("finish", () => {
               // console.log("audio stream finished");
               asrWritableStream.end();
+              audio.destroy();
             });
           });
         });

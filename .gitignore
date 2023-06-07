@@ -7,3 +7,4 @@ node_modules
 .env
 *.js
 tts_output
+testing

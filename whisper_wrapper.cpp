@@ -56,7 +56,7 @@ struct Workload {
 };
 
 const static int n_samples_30s = WHISPER_SAMPLE_RATE * 30;
-const static int n_samples_overlap_desired = WHISPER_SAMPLE_RATE * 0.2;
+const static int n_samples_overlap_desired = WHISPER_SAMPLE_RATE * 0.3;
 const static float vad_threshold = 0.03f;
 const static float freq_threshold = 0.0f;
 

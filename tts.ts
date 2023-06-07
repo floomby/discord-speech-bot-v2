@@ -1,53 +1,168 @@
-// Imports the Google Cloud client library
 import {
+  AudioPlayer,
+  AudioResource,
   VoiceConnection,
   createAudioPlayer,
   createAudioResource,
 } from "@discordjs/voice";
-
-// Import other required libraries
 import fs from "fs";
 import net from "net";
 
+const socket_file = "socket";
+
+const playingQueue: TTSDispatcher[] = [];
+let chronoIndex = 0;
+
+export class TTSDispatcher {
+  streamChronoIndex: number | null = null;
+  totalSegments: number | null = null;
+  segmentsReceived = 0;
+  hasErrored = false;
+  nextToQueue = 0;
+
+  private client: net.Socket;
+
+  constructor() {
+    playingQueue.push(this);
+    this.streamChronoIndex = chronoIndex;
+    chronoIndex++;
+  }
+
+  addSentence(sentence: string) {
+    if (this.totalSegments !== null) {
+      throw new Error("TTSDispatcher has already been finalized");
+    }
+
+    this.client = net.createConnection(socket_file, () => {
+      console.log("Connected to tts server");
+    });
+
+    // Send the text to the unix socket
+    this.client.write(`${this.streamChronoIndex}:${this.segmentsReceived} ${sentence}`, () => {
+      // end the message
+      this.client.end();
+    });
+
+    this.segmentsReceived++;
+  }
+
+  finalize() {
+    this.totalSegments = this.segmentsReceived;
+  } 
+};
+
+type TTSMetadata = {
+  title: string;
+};
 // Creates a client
 const output_dir = "tts_output";
 
-let connections = new Map<number, VoiceConnection>();
+let connection: null | VoiceConnection = null;
+let player: null | AudioPlayer = null;
 
-const init = () => {
-  // make an empty directory for the outputs called "outputs"
-  if (!fs.existsSync(output_dir)) {
-    fs.mkdirSync(output_dir);
-  }
-  // remove all files from the outputs directory
-  fs.readdir(output_dir, (err, files) => {
-    if (err) throw err;
-    for (const file of files) {
-      fs.unlink(`${output_dir}/${file}`, (err) => {
-        if (err) throw err;
-      });
-    }
+const setConnection = (newConnection: VoiceConnection) => {
+  connection = newConnection;
+  player = createAudioPlayer();
+  connection.subscribe(player);
+
+  player.on("error", (error) => {
+    console.error("Error:", error.message, "with track", (error.resource.metadata as TTSMetadata).title);
+    playNext();
   });
 
+  player.on("stateChange", (oldState, newState) => {
+    if (newState.status === "idle") {
+      playNext();
+    }
+  });
+};
+
+let resourceQueue: AudioResource[] = [];
+
+const playNext = () => {
+  if (resourceQueue.length === 0) {
+    return;
+  }
+
+  if (!player) {
+    console.warn("No player found");
+    return;
+  }
+
+  if (player.state.status === "playing") {
+    return;
+  }
+
+  const resource = resourceQueue.shift();
+
+  player.play(resource);
+};
+
+const resourceMap = new Map<string, AudioResource>();
+
+let lastQueuedChronoIndex: number | null = null;
+let lastQueuedTime = (new Date()).getTime();
+
+const playQueuer = () => {
+  if (playingQueue.length === 0) {
+    return;
+  }
+
+  const currentChronoIndex = playingQueue[0].streamChronoIndex;
+  const isFinalized = playingQueue[0].totalSegments !== null;
+  const isErrored = playingQueue[0].hasErrored;
+  const nextToQueue = playingQueue[0].nextToQueue;
+
+  if (currentChronoIndex === null) {
+    throw new Error("TTSDispatcher has not been initialized");
+  }
+
+  const isDone = isFinalized && nextToQueue >= playingQueue[0].totalSegments;
+
+  if (isDone || isErrored) {
+    playingQueue.shift();
+    playQueuer();
+    playNext();
+    return;
+  }
+
+  const resourceName = `${currentChronoIndex}:${nextToQueue}`;
+  if (resourceMap.has(resourceName)) {
+    resourceQueue.push(resourceMap.get(resourceName)!);
+    playingQueue[0].nextToQueue++;
+
+    lastQueuedChronoIndex = currentChronoIndex;
+    lastQueuedTime = (new Date()).getTime();
+  }
+
+  // if too much time has passed we should declare the dispatcher errored
+  if (lastQueuedChronoIndex === currentChronoIndex && (new Date()).getTime() - lastQueuedTime > 20000) {
+    playingQueue[0].hasErrored = true;
+  }
+
+  playNext();
+};
+
+setInterval(playQueuer, 100);
+
+const init = () => {
   fs.watch(output_dir, (eventType, filename) => {
     if (eventType === "rename" && filename) {
-      const nonce = parseInt(filename.split(".")[0]);
-
-      const connection = connections.get(nonce);
-      if (!connection) {
-        console.error(`No connection found for nonce ${nonce}`);
-        return;
-      }
-
-      connections.delete(nonce);
-
-      const player = createAudioPlayer();
+      const name = filename.split(".")[0];
 
       const resource = createAudioResource(`${output_dir}/${filename}`, {
         metadata: {
-          title: "text to speech response",
+          title: `text to speech response: ${filename}`,
         },
       });
+
+      // resource.playStream.on("end", () => {
+      //   fs.unlink(`${output_dir}/${filename}`, (err) => {
+      //     if (err) {
+      //       console.error(err);
+      //     }
+      //   });
+      // });
 
       resource.playStream.on("error", (error) => {
         console.error(
@@ -58,30 +173,9 @@ const init = () => {
         );
       });
 
-      connection.subscribe(player);
-      player.play(resource);
+      resourceMap.set(name, resource);
     }
   });
 };
 
-const socket_file = "socket";
-
-let nonce = 0;
-
-// TODO Convert this to a stream if googles api supports it
-const playText = async (text: string, connection: VoiceConnection) => {
-  const client = net.createConnection(socket_file, () => {
-    console.log("Connected to tts server");
-  });
-
-  // Send the text to the unix socket
-  client.write(`${nonce} ${text}`, () => {
-    // end the message
-    client.end();
-  });
-
-  connections.set(nonce, connection);
-  nonce++;
-};
-
-export { init as initTTS, playText };
+export { init as initTTS, setConnection, connection };
