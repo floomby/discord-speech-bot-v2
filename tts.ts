@@ -7,6 +7,8 @@ import {
 } from "@discordjs/voice";
 import fs from "fs";
 import net from "net";
+import { conversation } from "./conversation";
+import { bot_name } from "./config";
 
 const socket_file = "socket";
 
@@ -33,14 +35,25 @@ export class TTSDispatcher {
       throw new Error("TTSDispatcher has already been finalized");
     }
 
-    this.client = net.createConnection(socket_file, () => {
-      console.log("Connected to tts server");
-    });
+    this.client = net.createConnection(socket_file, () => {});
 
-    // Send the text to the unix socket
-    this.client.write(`${this.streamChronoIndex}:${this.segmentsReceived} ${sentence}`, () => {
-      // end the message
-      this.client.end();
+    sentence = sentence.trim();
+
+    // if the sentence starts with ${bot_name}: or ${bot_name} bot: we should remove it
+    const regex = new RegExp(`^${bot_name} *(bot)?: ?`, "i");
+    sentence = sentence.replace(regex, "").trim();
+
+    this.client.write(
+      `${this.streamChronoIndex}:${this.segmentsReceived} ${sentence}`,
+      () => {
+        this.client.end();
+      }
+    );
+
+    conversation.addUtterance({
+      who: bot_name,
+      utterance: sentence,
+      time: new Date(),
     });
 
     this.segmentsReceived++;
@@ -48,8 +61,8 @@ export class TTSDispatcher {
 
   finalize() {
     this.totalSegments = this.segmentsReceived;
-  } 
-};
+  }
+}
 
 type TTSMetadata = {
   title: string;
@@ -66,7 +79,12 @@ const setConnection = (newConnection: VoiceConnection) => {
   connection.subscribe(player);
 
   player.on("error", (error) => {
-    console.error("Error:", error.message, "with track", (error.resource.metadata as TTSMetadata).title);
+    console.error(
+      "Error:",
+      error.message,
+      "with track",
+      (error.resource.metadata as TTSMetadata).title
+    );
     playNext();
   });
 
@@ -101,7 +119,7 @@ const playNext = () => {
 const resourceMap = new Map<string, AudioResource>();
 
 let lastQueuedChronoIndex: number | null = null;
-let lastQueuedTime = (new Date()).getTime();
+let lastQueuedTime = new Date().getTime();
 
 const playQueuer = () => {
   if (playingQueue.length === 0) {
@@ -132,11 +150,14 @@ const playQueuer = () => {
     playingQueue[0].nextToQueue++;
 
     lastQueuedChronoIndex = currentChronoIndex;
-    lastQueuedTime = (new Date()).getTime();
+    lastQueuedTime = new Date().getTime();
   }
 
   // if too much time has passed we should declare the dispatcher errored
-  if (lastQueuedChronoIndex === currentChronoIndex && (new Date()).getTime() - lastQueuedTime > 20000) {
+  if (
+    lastQueuedChronoIndex === currentChronoIndex &&
+    new Date().getTime() - lastQueuedTime > 20000
+  ) {
     playingQueue[0].hasErrored = true;
   }
 

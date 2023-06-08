@@ -20,6 +20,8 @@ import {
   finalPrompt,
   ConversationContext,
 } from "./prompting";
+import { conversation, initConversationDaemon } from "./conversation";
+import { bot_name } from "./config";
 
 dotenv.config();
 
@@ -38,43 +40,43 @@ const client = new Client({
 
 const ASRUnits = new Map<string, any>();
 
-const utterances = new Map<string, QuiescenceMonitor<string>>();
-
-const conversation: {
-  who: string;
-  utterance: string;
-  time: Date;
-}[] = [];
+const utterances = new Map<string, QuiescenceMonitor>();
 
 const utteranceCallbackBuilder =
   (
     id: string,
     name: string,
-    player: (textToPlay: string) => void,
-    conversationContext: ConversationContext
+    conversationContext: ConversationContext,
+    callback: () => void
   ) =>
-  async (text: string[]) => {
-    const fullText = text.join(" ");
-    console.log(`Utterance ${id} received: ${fullText}`);
-    conversation.push({
-      who: name,
-      utterance: fullText,
-      time: new Date(),
-    });
+  async (text: string) => {
+    console.log(`Utterance ${id} received: ${text}`);
 
     const dispatcher = new TTSDispatcher();
 
     const response = await finalPrompt(
-      fullText,
+      text,
       dispatcher,
-      conversationContext
+      conversationContext,
+      name,
+      conversation.transformConversationOrGetCachedSynopsis(4)
     );
-    // player(response);
+    
+    callback();
     return response;
   };
 
 initTTS();
 initPrompting();
+initConversationDaemon();
+
+// This code is development specific and will go away/change depending on how you have the bot deployed
+const fixNames = (name: string) => {
+  if (["Charlie_Bot", "Charlie-Bot", "oracle", "oracle-v2"].includes(name)) {
+    return bot_name;
+  }
+  return name;
+};
 
 client.on("ready", () => {
   console.log("Client ready!");
@@ -114,34 +116,41 @@ client.on("ready", () => {
 
           const encoder = new OpusEncoder(16000, 1);
           receiver.speaking.on("start", async (userID) => {
-            let utterance = utterances.get(userID);
-
-            if (!utterance) {
-              const userName =
-                client.users.cache.get(userID)?.username ?? "<unknown>";
-
-              utterance = new QuiescenceMonitor<string>(
-                2000,
-                utteranceCallbackBuilder(
-                  userID,
-                  userName,
-                  (text) => console.log(`Playing ${text}`),
-                  {
-                    usersInChannel: channel.members.map(
-                      (member) => member.user.username
-                    ),
-                  }
-                ),
-                (val: string) => /charlie/i.test(val)
-              );
-              utterances.set(userID, utterance);
-            }
-
-            const callback = (...args) => {
-              utterance.activity(args[0] as string);
-              if (utterance.hot) {
-                interimPrompt(utterance.acm);
+            
+            const callback = (text: string) => {
+              let utterance = utterances.get(userID);
+  
+              if (!utterance) {
+                const userName =
+                  client.users.cache.get(userID)?.username ?? "<unknown>";
+  
+                utterance = new QuiescenceMonitor(
+                  1900,
+                  utteranceCallbackBuilder(
+                    userID,
+                    userName,
+                    {
+                      usersInChannel: channel.members.map((member) =>
+                        fixNames(member.user.username)
+                      ),
+                    },
+                    () => {
+                      utterances.delete(userID);
+                    }
+                  ),
+                  (val: string) => {
+                    const regex = new RegExp(bot_name, "i");
+                    return regex.test(val); 
+                  },
+                  userName
+                );
+                utterances.set(userID, utterance);
               }
+
+              utterance.activity(text);
+              // if (utterance.hot) {
+              //   interimPrompt(utterance.acm);
+              // }
             };
 
             let whisper = ASRUnits.get(userID);
@@ -150,29 +159,33 @@ client.on("ready", () => {
               whisper = WhisperWrapper.createASRUnit(callback, userID);
               ASRUnits.set(userID, whisper);
             }
-
             const asrWritableStream = new Writable();
             asrWritableStream._write = (chunk, encoding, next) => {
               whisper.process(chunk);
               next();
             };
 
-            // Create a recognize stream
-            const audio = receiver
-              .subscribe(userID, {
+            let subscription = receiver.subscriptions.get(userID);
+            if (!subscription) {
+              subscription = receiver.subscribe(userID, {
                 end: {
                   behavior: EndBehaviorType.AfterSilence,
-                  duration: 1000,
+                  duration: 1500,
                 },
-              })
+              });
+            }
+
+            // Create a recognize stream
+            const audio = subscription
               .pipe(new OpusDecodingStream({}, encoder))
               .pipe(asrWritableStream);
 
             audio.on("error", console.error);
             audio.on("finish", () => {
-              // console.log("audio stream finished");
               asrWritableStream.end();
               audio.destroy();
+              // remove the event listeners to the "data" event
+              subscription?.removeAllListeners("data");
             });
           });
         });

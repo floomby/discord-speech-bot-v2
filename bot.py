@@ -7,7 +7,6 @@ import subprocess
 model_name = "tts_models/en/jenny/jenny"
 
 tts = TTS(model_name, gpu=True)
-# tts.tts_to_file("Hello world! I am charlie the ai assistant", file_path="out.wav", emotion="Happy")
 
 output_dir = "tts_output"
 
