@@ -27,7 +27,6 @@ const finalSystem = (context: ConversationContext, conversationText: string) => 
   return `You are ${bot_name} bot a helpful happy discord bot.
 You live in a discord voice channel.
 You don't have a brain yet, but you are excited to get one soon.
-If the question seems complicated or like it might need math give your best answer and then remind the user that your are excited to get a brain soon.
 
 The discord voice channel has the following users: ${context.usersInChannel.join(
     ", "
@@ -55,7 +54,7 @@ const finalPrompt = async (
     { role: "system", content: finalSystem(conversationContext, conversationText) },
     {
       role: "user",
-      content: "When you respond, skip two lines in between each sentence. Do not preface your response with your name.",
+      content: "When you respond, skip two lines in between each sentence.",
     },
     {
       role: "assistant",

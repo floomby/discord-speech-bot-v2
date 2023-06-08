@@ -35,13 +35,17 @@ export class TTSDispatcher {
       throw new Error("TTSDispatcher has already been finalized");
     }
 
-    this.client = net.createConnection(socket_file, () => {});
-
     sentence = sentence.trim();
 
     // if the sentence starts with ${bot_name}: or ${bot_name} bot: we should remove it
     const regex = new RegExp(`^${bot_name} *(bot)?: ?`, "i");
     sentence = sentence.replace(regex, "").trim();
+
+    if (sentence.length === 0) {
+      return;
+    }
+
+    this.client = net.createConnection(socket_file, () => {});
 
     this.client.write(
       `${this.streamChronoIndex}:${this.segmentsReceived} ${sentence}`,

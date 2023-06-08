@@ -56,7 +56,7 @@ struct Workload {
 };
 
 const static int n_samples_30s = WHISPER_SAMPLE_RATE * 30;
-const static int n_samples_overlap_desired = WHISPER_SAMPLE_RATE * 0.25;
+const static int n_samples_overlap_desired = WHISPER_SAMPLE_RATE * 0.26;
 const static float vad_threshold = 0.028f;
 const static float freq_threshold = 0.0f;
 
@@ -106,7 +106,7 @@ class ASRUnit : public std::enable_shared_from_this<ASRUnit> {
     wparams.max_tokens       = 512;
     wparams.language         = "en";
     // wparams.n_threads        = std::max(1u, std::thread::hardware_concurrency() - 1);
-    wparams.n_threads        = 4;
+    wparams.n_threads        = 5;
 
     wparams.audio_ctx        = 0;
     wparams.speed_up         = false;

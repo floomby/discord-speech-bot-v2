@@ -92,7 +92,7 @@ const init = () => {
   setInterval(() => {
     conversation.update();
     latentConversation.update(
-      "Summarize the conversation, it will have lots of noise from the environment. Ignore all the stray noises. If there is no conversation, just say there is no content."
+      "Summarize the conversation in one or two sentences, it will have lots of noise from the environment. Ignore all the stray noises. If there is no conversation, just say that nothing is being talked about."
     );
   }, 1000 * 60 * 5);
 };

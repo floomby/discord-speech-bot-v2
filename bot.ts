@@ -125,7 +125,7 @@ client.on("ready", () => {
                   client.users.cache.get(userID)?.username ?? "<unknown>";
   
                 utterance = new QuiescenceMonitor(
-                  1900,
+                  1700,
                   utteranceCallbackBuilder(
                     userID,
                     userName,
