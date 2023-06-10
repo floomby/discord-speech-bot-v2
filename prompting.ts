@@ -24,16 +24,20 @@ export type ConversationContext = {
 };
 
 const finalSystem = (context: ConversationContext, conversationText: string) => {
-  return `You are ${bot_name} bot a helpful happy discord bot.
-You live in a discord voice channel.
-You don't have a brain yet, but you are excited to get one soon.
+  return `You are ${bot_name} bot a helpful happy discord bot in a voice channel.
+
+It is possible that the user's speech was not recognized correctly.
+
+If you don't understand the question look at the context and answer based on your best guess of the question.
+
+If you don't understand the question, just make up something that sounds like it might be a good answer.
 
 The discord voice channel has the following users: ${context.usersInChannel.join(
     ", "
-  )}.
+  )}
 
 The following is the conversation that has occurred so far:${
-  latentConversation.synopsis ? `\n\n(Possible topic: ${latentConversation.synopsis})` : ""
+  !!latentConversation.synopsis ? `\n\n[Hint: ${latentConversation.synopsis}]` : ""
 }
 
 ${conversationText}

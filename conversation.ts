@@ -46,13 +46,16 @@ export class CondensedConversation {
     return acm;
   }
 
-  summarizeConversation(altPrompt?: string) {
+  summarizeConversation(altPrompt?: string, synopsisTransform?: (synopsis: string) => string) {
     const conversation = this.transformConversationOrGetCachedSynopsis(50);
 
     summarizeConversation(conversation, altPrompt).then((synopsis) => {
       console.log("Got synopsis", synopsis);
       if (synopsis?.content) {
         this.synopsis = synopsis.content;
+        if (synopsisTransform) {
+          this.synopsis = synopsisTransform(this.synopsis);
+        }
         this.lastUpdated = new Date();
       } else {
         console.error("Failed to summarize conversation");
@@ -60,7 +63,7 @@ export class CondensedConversation {
     });
   }
 
-  update(altPrompt?: string) {
+  update(altPrompt?: string, synopsisTransform?: (synopsis: string) => string) {
     // if we are dirty and have more than 10 unsummarized utterances, summarize
     if (!this.dirty || this.conversation.length < 10) {
       return;
@@ -78,7 +81,7 @@ export class CondensedConversation {
     }
 
     if (unsummarized > 10) {
-      this.summarizeConversation(altPrompt);
+      this.summarizeConversation(altPrompt, synopsisTransform);
     }
   }
 }
@@ -87,12 +90,17 @@ const conversation: CondensedConversation = new CondensedConversation();
 const latentConversation: CondensedConversation = new CondensedConversation();
 
 const init = () => {
-  // TODO set up a interval that does conversation summaries
-
   setInterval(() => {
     conversation.update();
     latentConversation.update(
-      "Summarize the conversation in one or two sentences, it will have lots of noise from the environment. Ignore all the stray noises. If there is no conversation, just say that nothing is being talked about."
+      "Give a short summary of the conversation, it will have lots of noise from the environment. Ignore all the stray noises. If there is no conversation, just say \"No Topic\".",
+      (synopsis) => {
+        if (/no topic/i.test(synopsis)) {
+          console.log("No latent topic, not summarizing");
+          return "";
+        }
+        return synopsis;
+      }
     );
   }, 1000 * 60 * 5);
 };

@@ -147,6 +147,9 @@ client.on("ready", () => {
                 utterances.set(userID, utterance);
               }
 
+              console.log(`Utterance ${userID} received: ${text}`);
+              text = text.replace(/harley/gi, bot_name);
+              text = text.replace(/[^h]arlie/gi, bot_name);
               utterance.activity(text);
               // if (utterance.hot) {
               //   interimPrompt(utterance.acm);
@@ -159,6 +162,7 @@ client.on("ready", () => {
               whisper = WhisperWrapper.createASRUnit(callback, userID);
               ASRUnits.set(userID, whisper);
             }
+            // TODO I leak asr units (I need to run an ASRUnit.destroy() and remove it from the map)
             const asrWritableStream = new Writable();
             asrWritableStream._write = (chunk, encoding, next) => {
               whisper.process(chunk);

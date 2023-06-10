@@ -12,6 +12,7 @@
 #include <fstream>
 #include <queue>
 #include <sstream>
+#include <optional>
 
 void high_pass_filter(std::vector<float> & data, float cutoff, float sample_rate) {
   const float rc = 1.0f / (2.0f * M_PI * cutoff);
@@ -50,15 +51,32 @@ struct Params {
 
 class ASRUnit;
 
+enum class WorkloadType {
+  Audio,
+  Release
+};
+
 struct Workload {
-  std::vector<float> buffer;
+  WorkloadType type;
+  std::optional<std::vector<float>> buffer;
   std::shared_ptr<ASRUnit> unit;
 };
 
-const static int n_samples_30s = WHISPER_SAMPLE_RATE * 30;
-const static int n_samples_overlap_desired = WHISPER_SAMPLE_RATE * 0.26;
-const static float vad_threshold = 0.028f;
-const static float freq_threshold = 0.0f;
+struct TimestampedBuffer {
+  std::vector<float> buffer;
+  int64_t timestamp;
+  int64_t endTime() const {
+    return timestamp + buffer.size() * 1000 / WHISPER_SAMPLE_RATE;
+  }
+};
+
+const int n_samples_30s = WHISPER_SAMPLE_RATE * 30;
+const float freq_threshold = 0.0f;
+
+// TUNING PARAMETERS
+const int n_samples_overlap_desired = WHISPER_SAMPLE_RATE * 0.22;
+const float vad_threshold = 0.008f;
+const int n_whisper_threads = 5;
 
 class ASRUnit : public std::enable_shared_from_this<ASRUnit> {
   static struct whisper_context *ctx;
@@ -66,6 +84,7 @@ class ASRUnit : public std::enable_shared_from_this<ASRUnit> {
   static bool running;
   static std::queue<Workload> workQueue;
   static std::mutex workQueueMutex;
+  static std::vector<float> inferenceBuffer;
 
   // NOTE This is model specific, this needs to be updated if the model changes
   static bool suppressQuietInferences(const std::string &text) {
@@ -80,18 +99,19 @@ class ASRUnit : public std::enable_shared_from_this<ASRUnit> {
       return;
     }
 
-    std::vector<float> inference_buffer(n_samples_30s, 0.0f);
+    // zero out the inference buffer
+    std::fill(inferenceBuffer.begin(), inferenceBuffer.end(), 0.0f);
 
-    const int samples_to_copy = std::min(n_samples_30s, unit->unprocessedSamples + n_samples_overlap_desired);
+    const int samplesToCopy = std::min(n_samples_30s, unit->unprocessedSamples + n_samples_overlap_desired);
     unit->unprocessedSamples = 0;
 
     // copy the samples into the beginning of the inference buffer
-    std::copy(unit->pcmf32.end() - samples_to_copy, unit->pcmf32.end(), inference_buffer.begin());
+    std::copy(unit->pcmf32.end() - samplesToCopy, unit->pcmf32.end(), inferenceBuffer.begin());    
 
     // run vad on the inference buffer
-    const bool is_speech = vad(inference_buffer, WHISPER_SAMPLE_RATE, 1000, vad_threshold, freq_threshold);
+    const bool isSpeech = vad(inferenceBuffer, WHISPER_SAMPLE_RATE, 1000, vad_threshold, freq_threshold);
 
-    if (!is_speech) {
+    if (!isSpeech) {
       return;
     }
 
@@ -106,7 +126,7 @@ class ASRUnit : public std::enable_shared_from_this<ASRUnit> {
     wparams.max_tokens       = 512;
     wparams.language         = "en";
     // wparams.n_threads        = std::max(1u, std::thread::hardware_concurrency() - 1);
-    wparams.n_threads        = 5;
+    wparams.n_threads        = n_whisper_threads;
 
     wparams.audio_ctx        = 0;
     wparams.speed_up         = false;
@@ -118,7 +138,7 @@ class ASRUnit : public std::enable_shared_from_this<ASRUnit> {
     wparams.prompt_tokens = unit->prompt_tokens.data();
     wparams.prompt_n_tokens = unit->prompt_tokens.size();
 
-    if (whisper_full(ctx, wparams, inference_buffer.data(), inference_buffer.size()) != 0) {
+    if (whisper_full(ctx, wparams, inferenceBuffer.data(), inferenceBuffer.size()) != 0) {
       Napi::Error::Fatal("ASRUnit::runWhisperOnUnit", "Failed to process audio");
     }
 
@@ -137,9 +157,9 @@ class ASRUnit : public std::enable_shared_from_this<ASRUnit> {
 
     // TODO Make this non-blocking (new thread for managing the text results)
     const auto status = unit->callback.BlockingCall(unit.get());
-    // if (status != napi_ok) {
-    //   we don't really have to do anything here because the unit will get destroyed via the shared_ptr
-    // }
+    if (status != napi_ok) {
+      unit->destroyed = true;
+    }
   }
 
   static void runWhisper() {
@@ -152,7 +172,6 @@ class ASRUnit : public std::enable_shared_from_this<ASRUnit> {
         while (!workQueue.empty()) {
           workloads.push_back(workQueue.front());
           workQueue.pop();
-          didWork = true;
         }
       }
 
@@ -161,37 +180,47 @@ class ASRUnit : public std::enable_shared_from_this<ASRUnit> {
 
       for (auto &workload : workloads) {
         // process the audio
-        auto unit = workload.unit;
-        auto pcm = workload.buffer;
-
-        unit->unprocessedSamples += pcm.size();
-        
-        // keep the last 30s of audio
-        unit->pcmf32.insert(unit->pcmf32.end(), pcm.begin(), pcm.end());
-        unit->pcmf32.erase(unit->pcmf32.begin(), unit->pcmf32.begin() + pcm.size());
-
-        // TODO Make this non dropping
-        if (pcm.size() > n_samples_30s) {
-          std::clog << "Warning: dropping " << pcm.size() - n_samples_30s << " samples" << std::endl;
-        }
-
-        bool found = false;
-        for (auto &u : units) {
-          if (u->id == unit->id) {
-            found = true;
-            break;
+        if (workload.type == WorkloadType::Audio) {
+          auto unit = workload.unit;
+          if (unit->destroyed) {
+            continue;
           }
-        }
 
-        if (!found) {
-          units.push_back(unit);
+          didWork = true;
+          auto pcm = *workload.buffer;
+
+          unit->unprocessedSamples += pcm.size();
+          
+          // keep the last 30s of audio
+          unit->pcmf32.insert(unit->pcmf32.end(), pcm.begin(), pcm.end());
+          unit->pcmf32.erase(unit->pcmf32.begin(), unit->pcmf32.begin() + pcm.size());
+
+          // TODO Make this non dropping
+          if (pcm.size() > n_samples_30s) {
+            std::clog << "Warning: dropping " << pcm.size() - n_samples_30s << " samples" << std::endl;
+          }
+
+          bool found = false;
+          for (auto &u : units) {
+            if (u->id == unit->id) {
+              found = true;
+              break;
+            }
+          }
+
+          if (!found) {
+            units.push_back(unit);
+          }
+        } else {
+          // WorkloadType::Release
+          workload.unit->callback.Release();
         }
       }
 
       // run whisper on the units
       for (auto &unit : units) {
-        if (unit->needsAquisition) {
-          unit->needsAquisition = false;
+        if (unit->needsAcquisition) {
+          unit->needsAcquisition = false;
           auto status = unit->callback.Acquire();
           if (status != napi_ok) {
             Napi::Error::Fatal("ASRUnit::runWhisper", "Failed to acquire callback");
@@ -212,7 +241,12 @@ class ASRUnit : public std::enable_shared_from_this<ASRUnit> {
   std::string text;
   int unprocessedSamples = 0;
   
-  bool needsAquisition = true;
+  // Lifecycle
+  bool needsAcquisition = true;
+  bool destroyed = false;
+
+  // The ability to re run the inference 
+  // std::vector<TimestampedBuffer> finalizationBuffer;
 public:
   static void callbackTrampoline(Napi::Env env, Napi::Function jsCallback, std::nullptr_t *data, ASRUnit *thisView) {
     jsCallback.Call({ Napi::String::New(env, thisView->text) });
@@ -233,6 +267,8 @@ public:
       Napi::Error::Fatal("ASRUnit::init", "Failed to initialize whisper (check model path)");
     }
 
+    inferenceBuffer = std::vector(n_samples_30s, 0.0f);
+
     atexit([]() {
       if (ctx) {
         whisper_free(ctx);
@@ -243,6 +279,11 @@ public:
   ASRUnit(const std::string &id, const decltype(callback) &callback) : pcmf32(n_samples_30s, 0.0f), id(id), callback(callback) {}
 
   void process(const Napi::Buffer<char> &data) {
+    if (destroyed) {
+      std::clog << "Warning: ASRUnit::process called on destroyed unit" << std::endl;
+      return;
+    }
+
     std::vector<float> pcm(data.ByteLength() / 2);
 
     for (size_t i = 0; i < pcm.size(); i++) {
@@ -250,7 +291,14 @@ public:
     }
 
     std::lock_guard<std::mutex> lock(workQueueMutex);
-    workQueue.push({pcm, shared_from_this()});
+    workQueue.push({WorkloadType::Audio, pcm, shared_from_this()});
+  }
+
+  void destroy() {
+    destroyed = true;
+    // need to release the callback
+    std::lock_guard<std::mutex> lock(workQueueMutex);
+    workQueue.push({WorkloadType::Release, {}, shared_from_this()});
   }
 
   ~ASRUnit() {
@@ -263,6 +311,7 @@ std::thread ASRUnit::whisperWorker;
 bool ASRUnit::running;
 std::queue<Workload> ASRUnit::workQueue;
 std::mutex ASRUnit::workQueueMutex;
+std::vector<float> ASRUnit::inferenceBuffer;
 
 Napi::Value createASRUnit(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
@@ -286,7 +335,7 @@ Napi::Value createASRUnit(const Napi::CallbackInfo &info) {
   });
 
   Napi::Function end = Napi::Function::New(env, [unit](const Napi::CallbackInfo &info) {
-    // unit->end();
+    unit->destroy();
 
     return Napi::Value();
   });
@@ -294,7 +343,7 @@ Napi::Value createASRUnit(const Napi::CallbackInfo &info) {
   auto ret = Napi::Object::New(env);
 
   ret.Set(Napi::String::New(env, "process"), process);
-  ret.Set(Napi::String::New(env, "end"), end);
+  ret.Set(Napi::String::New(env, "destroy"), end);
 
   return ret;
 }
