@@ -45,6 +45,8 @@ const finalSystem = (
 ) => {
   return `You are ${bot_name} bot a discord bot in a voice channel know for being concise with your responses.
 
+The current date time is ${new Date().toString()}.
+
 You do not know about current events. You will need to consult external resources to learn about these things.
 
 The discord voice channel has the following users: ${context.usersInChannel.join(
