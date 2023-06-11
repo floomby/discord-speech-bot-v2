@@ -45,8 +45,6 @@ const finalSystem = (
 ) => {
   return `You are ${bot_name} bot a discord bot in a voice channel know for being concise with your responses.
 
-If you don't understand the question look at the context try and understand what is the most likely question.
-
 You do not know about current events. You will need to consult external resources to learn about these things.
 
 The discord voice channel has the following users: ${context.usersInChannel.join(
@@ -114,7 +112,13 @@ I understand that if I need to look something up I should say "I need to consult
 
     let acm = "";
 
-    await chat.sendMessage(`${userName}: ${complete}`, (message) => {
+    await chat.sendMessage(`Answer the question remembering that if you need to consult external resources, you should say only "I need to consult external resources".
+
+======
+${userName}: ${complete}
+======
+
+`, (message) => {
       const choice = message.message.choices[0];
       if (!choice.finish_reason) {
         const content = (choice.delta as { content?: string }).content;
@@ -182,16 +186,28 @@ Why does ${bot_name} bot need to consult external resources?
   console.log("Intermediate question> ", ret);
 
   const question = await chat.sendMessage(
-    `You can ask an all knowing oracle a question. Rephrase what ${bot_name} bot said in the form of a question to this oracle.`
+    `You can ask an all knowing oracle a question. Rephrase what ${bot_name} bot said in the form of a question to this oracle. If it seems like there are multiple questions, choose only the last question.`
   );
 
   console.log("Final question> ", question.content);
 
-  const answer = new TTSDispatcher();
+  let answer: TTSDispatcher | undefined;
 
-  const agentAnswer = await executor.call({ input: question.content });
+  try {
+    const agentAnswer = await executor.call({ input: question.content });
 
-  console.log("Agent answer> ", agentAnswer);
+    answer = new TTSDispatcher();
+  
+    console.log("Agent answer> ", agentAnswer);
+  
+    answer.addSentence(agentAnswer.output);
+    answer.finalize();
+  } catch (e) {
+    console.error(e);
+    if (answer) {
+      answer.hasErrored = true;
+    }
+  }
 };
 
 export {
