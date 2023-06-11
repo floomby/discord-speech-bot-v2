@@ -7,8 +7,9 @@ import {
 } from "@discordjs/voice";
 import fs from "fs";
 import net from "net";
-import { conversation } from "./conversation";
+import { CondensedConversation, conversation } from "./conversation";
 import { bot_name } from "./config";
+import { extractQuestion } from "./prompting";
 
 const socket_file = "socket";
 
@@ -22,12 +23,19 @@ export class TTSDispatcher {
   hasErrored = false;
   nextToQueue = 0;
 
+  frozenConversation: CondensedConversation | null = null;
+
   private client: net.Socket;
 
-  constructor() {
+  constructor(conversation?: CondensedConversation) {
     playingQueue.push(this);
     this.streamChronoIndex = chronoIndex;
     chronoIndex++;
+    if (!conversation) {
+      this.frozenConversation = null;
+    } else {
+      this.frozenConversation = conversation.clone();
+    }
   }
 
   addSentence(sentence: string) {
@@ -61,6 +69,14 @@ export class TTSDispatcher {
     });
 
     this.segmentsReceived++;
+
+    if (this.frozenConversation) {
+      // check if we need llm feedback (TODO I shouldn't do it here probably)
+      const externalResourceRegex = /external resource/i;
+      if (externalResourceRegex.test(sentence)) {
+        extractQuestion(this.frozenConversation);
+      }
+    }
   }
 
   finalize() {

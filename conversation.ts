@@ -46,7 +46,10 @@ export class CondensedConversation {
     return acm;
   }
 
-  summarizeConversation(altPrompt?: string, synopsisTransform?: (synopsis: string) => string) {
+  summarizeConversation(
+    altPrompt?: string,
+    synopsisTransform?: (synopsis: string) => string
+  ) {
     const conversation = this.transformConversationOrGetCachedSynopsis(50);
 
     summarizeConversation(conversation, altPrompt).then((synopsis) => {
@@ -84,6 +87,15 @@ export class CondensedConversation {
       this.summarizeConversation(altPrompt, synopsisTransform);
     }
   }
+
+  clone() {
+    const clone = new CondensedConversation();
+    clone.conversation = [...this.conversation];
+    clone.synopsis = this.synopsis;
+    clone.lastUpdated = this.lastUpdated;
+    clone.dirty = this.dirty;
+    return clone;
+  }
 }
 
 const conversation: CondensedConversation = new CondensedConversation();
@@ -93,14 +105,7 @@ const init = () => {
   setInterval(() => {
     conversation.update();
     latentConversation.update(
-      "Give a short summary of the conversation, it will have lots of noise from the environment. Ignore all the stray noises. If there is no conversation, just say \"No Topic\".",
-      (synopsis) => {
-        if (/no topic/i.test(synopsis)) {
-          console.log("No latent topic, not summarizing");
-          return "";
-        }
-        return synopsis;
-      }
+      "You have overheard a conversation, give a short summary of the conversation paying more attention to the most recent utterances.",
     );
   }, 1000 * 60 * 5);
 };
