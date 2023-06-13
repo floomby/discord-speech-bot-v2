@@ -55,14 +55,19 @@ export type ConversationContext = {
 const finalSystem = (
   context: ConversationContext,
   conversationText: string,
-  latentConversation: CondensedConversation
+  latentConversation: CondensedConversation,
+  activity: LoadedPackage | null
 ) => {
   return `You are ${bot_name} a discord bot in a voice channel know for being concise with your responses.
 
 The current date time is ${new Date().toString()}.
 
 You will need to consult external resources to learn about current events.
-
+${
+  activity
+    ? `\n${activity.name} is going on in the background in a different channel. If the question is about this say you need to use external resources.\n`
+    : ""
+}
 The discord voice channel has the following users: ${context.usersInChannel.join(
     ", "
   )}
@@ -88,7 +93,8 @@ const finalPrompt = async (
   conversationContext: ConversationContext,
   userName: string,
   conversationText: string,
-  latentConversation: CondensedConversation
+  latentConversation: CondensedConversation,
+  activity: LoadedPackage | null
 ) => {
   const messages: Message[] = [
     {
@@ -96,7 +102,8 @@ const finalPrompt = async (
       content: finalSystem(
         conversationContext,
         conversationText,
-        latentConversation
+        latentConversation,
+        activity
       ),
     },
     {
@@ -215,8 +222,9 @@ Why does ${bot_name} bot need to consult external resources?
 
   console.log("Intermediate question> ", ret);
 
+  // THIS PROMPT IS NOT WORKING WELL !!!!
   const question = await chat.sendMessage(
-    `You can ask an all knowing oracle a question. Rephrase what ${bot_name} bot said in the form of a question to this oracle. If it seems like there are multiple questions, choose only the last question.`
+    `Rephrase what is being asked of ${bot_name} bot into a question. If it seems like there are multiple questions, choose only the last question.`
   );
 
   console.log("Final question> ", question.content);
@@ -234,7 +242,9 @@ Why does ${bot_name} bot need to consult external resources?
   try {
     const agentAnswer = await executor.call({
       input: `${
-        showActivityHint ? `[HINT: This question may be about ${activity.name}] ` : ""
+        showActivityHint
+          ? `[HINT: This question may be about ${activity.name}] `
+          : ""
       }${question.content}`,
     });
 

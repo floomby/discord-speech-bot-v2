@@ -10,6 +10,7 @@ import net from "net";
 import { CondensedConversation, conversation } from "./conversation";
 import { bot_name } from "./config";
 import { extractQuestion } from "./prompting";
+import { LoadedPackage } from "./packageLoader";
 
 const socket_file = "socket";
 
@@ -25,10 +26,11 @@ export class TTSDispatcher {
   nextToQueue = 0;
 
   frozenConversation: CondensedConversation | null = null;
+  activity: LoadedPackage | null = null;
 
   private client: net.Socket;
 
-  constructor(conversation?: CondensedConversation) {
+  constructor(conversation?: CondensedConversation, activity?: LoadedPackage) {
     playingQueue.push(this);
     this.streamChronoIndex = chronoIndex;
     chronoIndex++;
@@ -37,6 +39,7 @@ export class TTSDispatcher {
     } else {
       this.frozenConversation = conversation.clone();
     }
+    this.activity = activity || null;
   }
 
   addSentence(sentence: string) {
@@ -49,6 +52,9 @@ export class TTSDispatcher {
     // if the sentence starts with ${bot_name}: or ${bot_name} bot: we should remove it
     const regex = new RegExp(`^${bot_name} *(bot)?: ?`, "i");
     sentence = sentence.replace(regex, "").trim();
+
+    // add a space after every number in the sentence
+    sentence = sentence.replace(/(\d+)([^!?.,"'])/g, "$1 $2");
 
     if (sentence.length === 0) {
       return;
@@ -75,7 +81,7 @@ export class TTSDispatcher {
       // check if we need llm feedback (TODO I shouldn't do it here probably)
       const externalResourceRegex = /external resource/i;
       if (externalResourceRegex.test(sentence)) {
-        extractQuestion(this.frozenConversation);
+        extractQuestion(this.frozenConversation, this.activity);
       }
     }
   }

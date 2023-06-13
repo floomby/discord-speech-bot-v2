@@ -290,7 +290,8 @@ client.on("ready", () => {
                       },
                       userName,
                       conversation.transformConversationOrGetCachedSynopsis(4),
-                      latentConversation
+                      latentConversation,
+                      activity
                     );
                   } else {
                     latentConversation.addUtterance({
