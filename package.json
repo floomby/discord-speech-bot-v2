@@ -1,11 +1,12 @@
 {
-  "name": "addons",
+  "name": "charlie",
   "version": "1.0.0",
   "description": "whisper-wrapper",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "install": "node-gyp rebuild"
+    "install": "node-gyp rebuild",
+    "start": "python bot.py"
   },
   "author": "",
   "license": "ISC",
