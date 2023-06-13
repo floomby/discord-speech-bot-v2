@@ -28,6 +28,7 @@ import {
   loadedPackages,
 } from "./prompting";
 import {
+  activity,
   conversation,
   initConversationDaemon,
   latentConversation,
@@ -63,7 +64,6 @@ const isRecentDuplicate = (text: string) => {
 };
 
 initTTS();
-initConversationDaemon();
 
 const keyFilename = "./keys/key.json";
 const speechClient = new speech.SpeechClient({
@@ -180,8 +180,7 @@ client.on("interactionCreate", async (interaction) => {
   } else if (commandName === "listpackages") {
     await interaction.reply({
       content:
-        "Available packages: " +
-        loadedPackages.map((p) => p.name).join(", "),
+        "Available packages: " + loadedPackages.map((p) => p.name).join(", "),
       ephemeral: true,
     });
   }
@@ -242,6 +241,14 @@ client.on("ready", () => {
                         phrases: [bot_name],
                         boost: 7.0,
                       },
+                      ...(!!activity
+                        ? [
+                            {
+                              phrases: activity.boosts,
+                              boost: 2.0,
+                            },
+                          ]
+                        : []),
                     ],
                   },
                   interimResults: false,
@@ -282,7 +289,8 @@ client.on("ready", () => {
                         ),
                       },
                       userName,
-                      conversation.transformConversationOrGetCachedSynopsis(4)
+                      conversation.transformConversationOrGetCachedSynopsis(4),
+                      latentConversation
                     );
                   } else {
                     latentConversation.addUtterance({
@@ -333,7 +341,10 @@ client.on("ready", () => {
 });
 
 initPrompting()
-  .then(() => client.login(TOKEN))
+  .then(() => {
+    client.login(TOKEN);
+    initConversationDaemon();
+  })
   .catch(console.error);
 
 class OpusDecodingStream extends Transform {

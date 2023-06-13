@@ -4,5 +4,6 @@
     "module": "nodenext",
     "moduleResolution": "node",
     "skipLibCheck": true
-  }
+  },
+  "exclude": ["node_modules", "jest.config.ts"]
 }

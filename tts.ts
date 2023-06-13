@@ -189,10 +189,10 @@ const playQueuer = () => {
   playNext();
 };
 
-// FIXME: Problematic global state
-setInterval(playQueuer, 100);
-
 const init = () => {
+  // FIXME: Problematic global state
+  setInterval(playQueuer, 100);
+
   fs.watch(output_dir, (eventType, filename) => {
     if (eventType === "rename" && filename) {
       const name = filename.split(".")[0];

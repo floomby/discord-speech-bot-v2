@@ -12,6 +12,7 @@ export type LoadedPackage = {
   boosts: string[];
   tool: DynamicTool;
   name: string;
+  vectorStore: HNSWLib;
 };
 
 const loadPackages = async (model: BaseLanguageModel) => {
@@ -24,7 +25,7 @@ const loadPackages = async (model: BaseLanguageModel) => {
 
   const packages = fs.readdirSync(packageDirectory);
   for (const packageFile of packages) {
-    const name = packageFile.replace("_", " ");
+    const name = packageFile.replace(/_/g, " ");
     const boosts = fs
       .readFileSync(
         `${packageDirectory}/${packageFile}/named_entities`,
@@ -32,11 +33,11 @@ const loadPackages = async (model: BaseLanguageModel) => {
       )
       .split("\n");
 
-    const vs = await HNSWLib.load(
+    const vectorStore = await HNSWLib.load(
       `${packageDirectory}/${packageFile}/data.hnsw`,
       new OpenAIEmbeddings()
     );
-    const answerChain = RetrievalQAChain.fromLLM(model, vs.asRetriever());
+    const answerChain = RetrievalQAChain.fromLLM(model, vectorStore.asRetriever());
 
     const tool = new DynamicTool({
       name: `${name} Reference`,
@@ -52,6 +53,7 @@ const loadPackages = async (model: BaseLanguageModel) => {
       boosts,
       tool,
       name,
+      vectorStore,
     });
   }
 

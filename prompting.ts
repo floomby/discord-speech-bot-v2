@@ -3,18 +3,15 @@ import { createChat } from "./streamingChat/createChat";
 import { Message } from "./streamingChat/createCompletions";
 
 import { bot_name } from "./config";
-import { CondensedConversation, latentConversation } from "./conversation";
+import { CondensedConversation } from "./conversation";
 import { TTSDispatcher } from "./tts";
 
 import { inspect } from "util";
 
 import { OpenAI } from "langchain/llms/openai";
 import { initializeAgentExecutorWithOptions } from "langchain/agents";
-import { SerpAPI, DynamicTool } from "langchain/tools";
+import { SerpAPI } from "langchain/tools";
 import { Calculator } from "langchain/tools/calculator";
-import { RetrievalQAChain } from "langchain/chains";
-import { OpenAIEmbeddings } from "langchain/embeddings/openai";
-import { HNSWLib } from "langchain/vectorstores/hnswlib";
 import { LoadedPackage, loadPackages } from "./packageLoader";
 
 // let openai: OpenAIApi | undefined;
@@ -36,7 +33,11 @@ const init = async () => {
 
   loadedPackages.push(...(await loadPackages(model)));
 
-  const tools = [new SerpAPI(), new Calculator(), ...loadedPackages.map((p) => p.tool)];
+  const tools = [
+    new SerpAPI(),
+    new Calculator(),
+    ...loadedPackages.map((p) => p.tool),
+  ];
 
   executor = await initializeAgentExecutorWithOptions(tools, model, {
     agentType: "zero-shot-react-description",
@@ -53,7 +54,8 @@ export type ConversationContext = {
 
 const finalSystem = (
   context: ConversationContext,
-  conversationText: string
+  conversationText: string,
+  latentConversation: CondensedConversation
 ) => {
   return `You are ${bot_name} a discord bot in a voice channel know for being concise with your responses.
 
@@ -85,12 +87,17 @@ const finalPrompt = async (
   dispatcher: TTSDispatcher,
   conversationContext: ConversationContext,
   userName: string,
-  conversationText: string
+  conversationText: string,
+  latentConversation: CondensedConversation
 ) => {
   const messages: Message[] = [
     {
       role: "system",
-      content: finalSystem(conversationContext, conversationText),
+      content: finalSystem(
+        conversationContext,
+        conversationText,
+        latentConversation
+      ),
     },
     {
       role: "user",
@@ -115,7 +122,7 @@ I understand that if I need to look something up I should say "I need to consult
     },
   ];
 
-  console.log(inspect(messages, false, null, true));
+  // console.log(inspect(messages, false, null, true));
 
   try {
     const chat = createChat({
@@ -172,11 +179,14 @@ const summarizeConversation = async (
   );
 };
 
-const extractQuestion = async (conversation: CondensedConversation) => {
-  console.log(
-    "extracting question from conversation",
-    inspect(conversation, false, null, true)
-  );
+const extractQuestion = async (
+  conversation: CondensedConversation,
+  activity: LoadedPackage | null
+) => {
+  // console.log(
+  //   "extracting question from conversation",
+  //   inspect(conversation, false, null, true)
+  // );
 
   const synopsis = conversation.transformConversationOrGetCachedSynopsis(4);
 
@@ -211,10 +221,22 @@ Why does ${bot_name} bot need to consult external resources?
 
   console.log("Final question> ", question.content);
 
-  let answer: TTSDispatcher | undefined;
+  let showActivityHint = false;
 
+  if (activity) {
+    showActivityHint = await isQuestionAboutActivity(
+      question.content,
+      activity
+    );
+  }
+
+  let answer: TTSDispatcher | undefined;
   try {
-    const agentAnswer = await executor.call({ input: question.content });
+    const agentAnswer = await executor.call({
+      input: `${
+        showActivityHint ? `[HINT: This question may be about ${activity.name}] ` : ""
+      }${question.content}`,
+    });
 
     answer = new TTSDispatcher();
 
@@ -230,6 +252,26 @@ Why does ${bot_name} bot need to consult external resources?
   }
 };
 
+const isQuestionAboutActivity = async (
+  question: string,
+  activity: LoadedPackage
+) => {
+  const chat = createChat({
+    apiKey: process.env.OPENAI_API_KEY,
+    model: "gpt-3.5-turbo",
+  });
+
+  const stringified = JSON.stringify([activity.name, ...activity.boosts]);
+
+  const response = await chat.sendMessage(
+    `Data: ${stringified}\n\n======\nQUESTION: ${question}\n======\n\ndoes anything in this data pertain to this question ("Yes" or "No")?`
+  );
+
+  console.log("Is question about data> ", response.content);
+
+  return /yes/i.test(response.content);
+};
+
 export {
   loadedPackages,
   init as initPrompting,
@@ -237,4 +279,5 @@ export {
   finalPrompt,
   summarizeConversation,
   extractQuestion,
+  isQuestionAboutActivity as isQuestionStandalone,
 };

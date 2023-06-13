@@ -4,9 +4,10 @@
   "description": "whisper-wrapper",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "install": "node-gyp rebuild",
-    "start": "python bot.py"
+    "start": "python bot.py",
+    "test": "mocha --timeout 50000",
+    "build": "tsc"
   },
   "author": "",
   "license": "ISC",
@@ -30,6 +31,11 @@
     "zod": "^3.21.4"
   },
   "devDependencies": {
-    "@types/node": "^20.2.5"
+    "@types/chai": "^4.3.5",
+    "@types/mocha": "^10.0.1",
+    "@types/node": "^20.2.5",
+    "chai": "^4.3.7",
+    "mocha": "^10.2.0",
+    "ts-node": "^10.9.1"
   }
 }

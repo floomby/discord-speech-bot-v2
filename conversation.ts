@@ -1,4 +1,5 @@
-import { summarizeConversation } from "./prompting";
+import { LoadedPackage } from "./packageLoader";
+import { loadedPackages, summarizeConversation } from "./prompting";
 
 export type ConversationElement = {
   who: string;
@@ -101,14 +102,29 @@ export class CondensedConversation {
 // FIXME: Problematic global state
 const conversation: CondensedConversation = new CondensedConversation();
 const latentConversation: CondensedConversation = new CondensedConversation();
+let activity: LoadedPackage | null = null;
+
+const pickActivity = () => {
+  // TODO: Actually do this
+  if (loadedPackages.length === 0) {
+    return "No packages loaded";
+  }
+  activity = loadedPackages[0];
+};
 
 const init = () => {
   setInterval(() => {
     conversation.update();
     latentConversation.update(
-      "You have overheard a conversation, give a short summary of the conversation paying more attention to the most recent utterances.",
+      "You have overheard a conversation, give a short summary of the conversation paying more attention to the most recent utterances."
     );
   }, 1000 * 60 * 5);
 };
 
-export { conversation, latentConversation, init as initConversationDaemon };
+export {
+  conversation,
+  latentConversation,
+  activity,
+  init as initConversationDaemon,
+  pickActivity,
+};
