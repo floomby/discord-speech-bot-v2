@@ -19,6 +19,7 @@ import { LoadedPackage, loadPackages } from "./packageLoader";
 
 // let openai: OpenAIApi | undefined;
 
+// FIXME: Problematic global state
 const loadedPackages: LoadedPackage[] = [];
 
 let executor:
@@ -54,11 +55,11 @@ const finalSystem = (
   context: ConversationContext,
   conversationText: string
 ) => {
-  return `You are ${bot_name} bot a discord bot in a voice channel know for being concise with your responses.
+  return `You are ${bot_name} a discord bot in a voice channel know for being concise with your responses.
 
 The current date time is ${new Date().toString()}.
 
-You do not know about current events. You will need to consult external resources to learn about these things.
+You will need to consult external resources to learn about current events.
 
 The discord voice channel has the following users: ${context.usersInChannel.join(
     ", "
@@ -230,10 +231,10 @@ Why does ${bot_name} bot need to consult external resources?
 };
 
 export {
+  loadedPackages,
   init as initPrompting,
   interimPrompt,
   finalPrompt,
   summarizeConversation,
   extractQuestion,
-  loadedPackages,
 };

@@ -98,6 +98,7 @@ export class CondensedConversation {
   }
 }
 
+// FIXME: Problematic global state
 const conversation: CondensedConversation = new CondensedConversation();
 const latentConversation: CondensedConversation = new CondensedConversation();
 

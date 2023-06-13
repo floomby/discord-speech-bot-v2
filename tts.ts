@@ -13,6 +13,7 @@ import { extractQuestion } from "./prompting";
 
 const socket_file = "socket";
 
+// FIXME: Problematic global state
 const playingQueue: TTSDispatcher[] = [];
 let chronoIndex = 0;
 
@@ -90,6 +91,7 @@ type TTSMetadata = {
 // Creates a client
 const output_dir = "tts_output";
 
+// FIXME: Problematic global state
 let connection: null | VoiceConnection = null;
 let player: null | AudioPlayer = null;
 
@@ -115,6 +117,7 @@ const setConnection = (newConnection: VoiceConnection) => {
   });
 };
 
+// FIXME: Problematic global state
 let resourceQueue: AudioResource[] = [];
 
 const playNext = () => {
@@ -136,8 +139,10 @@ const playNext = () => {
   player.play(resource);
 };
 
+// FIXME: Problematic global state
 const resourceMap = new Map<string, AudioResource>();
 
+// FIXME: Problematic global state
 let lastQueuedChronoIndex: number | null = null;
 let lastQueuedTime = new Date().getTime();
 
@@ -184,6 +189,7 @@ const playQueuer = () => {
   playNext();
 };
 
+// FIXME: Problematic global state
 setInterval(playQueuer, 100);
 
 const init = () => {

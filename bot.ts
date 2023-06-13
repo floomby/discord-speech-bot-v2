@@ -49,6 +49,7 @@ const client = new Client({
   ],
 });
 
+// FIXME: Problematic global state
 const recentCalls = new Map<string, number>();
 
 const isRecentDuplicate = (text: string) => {
