@@ -1,17 +1,25 @@
-import { Configuration, OpenAIApi } from "openai";
+// import { Configuration, OpenAIApi } from "openai";
 import { createChat } from "./streamingChat/createChat";
-import { inspect } from "util";
-import { TTSDispatcher } from "./tts";
-import { bot_name } from "./config";
 import { Message } from "./streamingChat/createCompletions";
+
+import { bot_name } from "./config";
 import { CondensedConversation, latentConversation } from "./conversation";
+import { TTSDispatcher } from "./tts";
+
+import { inspect } from "util";
 
 import { OpenAI } from "langchain/llms/openai";
 import { initializeAgentExecutorWithOptions } from "langchain/agents";
-import { SerpAPI } from "langchain/tools";
+import { SerpAPI, DynamicTool } from "langchain/tools";
 import { Calculator } from "langchain/tools/calculator";
+import { RetrievalQAChain } from "langchain/chains";
+import { OpenAIEmbeddings } from "langchain/embeddings/openai";
+import { HNSWLib } from "langchain/vectorstores/hnswlib";
+import { LoadedPackage, loadPackages } from "./packageLoader";
 
-let openai: OpenAIApi | undefined;
+// let openai: OpenAIApi | undefined;
+
+const loadedPackages: LoadedPackage[] = [];
 
 let executor:
   | Awaited<ReturnType<typeof initializeAgentExecutorWithOptions>>
@@ -24,7 +32,10 @@ const init = async () => {
   // openai = new OpenAIApi(configuration);
 
   const model = new OpenAI({ temperature: 0 });
-  const tools = [new SerpAPI(), new Calculator()];
+
+  loadedPackages.push(...(await loadPackages(model)));
+
+  const tools = [new SerpAPI(), new Calculator(), ...loadedPackages.map((p) => p.tool)];
 
   executor = await initializeAgentExecutorWithOptions(tools, model, {
     agentType: "zero-shot-react-description",
@@ -114,29 +125,32 @@ I understand that if I need to look something up I should say "I need to consult
 
     let acm = "";
 
-    await chat.sendMessage(`Answer the question remembering that if you need to consult external resources, you should say only "I need to consult external resources".
+    await chat.sendMessage(
+      `Answer the question remembering that if you need to consult external resources, you should say only "I need to consult external resources".
 
 ======
 ${userName}: ${complete}
 ======
 
-`, (message) => {
-      const choice = message.message.choices[0];
-      if (!choice.finish_reason) {
-        const content = (choice.delta as { content?: string }).content;
-        if (content) {
-          if (content.includes("\n\n")) {
-            dispatcher.addSentence(acm + content);
-            acm = "";
-          } else {
-            acm += content;
+`,
+      (message) => {
+        const choice = message.message.choices[0];
+        if (!choice.finish_reason) {
+          const content = (choice.delta as { content?: string }).content;
+          if (content) {
+            if (content.includes("\n\n")) {
+              dispatcher.addSentence(acm + content);
+              acm = "";
+            } else {
+              acm += content;
+            }
           }
+        } else {
+          dispatcher.addSentence(acm);
+          dispatcher.finalize();
         }
-      } else {
-        dispatcher.addSentence(acm);
-        dispatcher.finalize();
       }
-    });
+    );
   } catch (e) {
     console.error(e);
     dispatcher.hasErrored = true;
@@ -158,7 +172,10 @@ const summarizeConversation = async (
 };
 
 const extractQuestion = async (conversation: CondensedConversation) => {
-  console.log("extracting question from conversation", inspect(conversation, false, null, true));
+  console.log(
+    "extracting question from conversation",
+    inspect(conversation, false, null, true)
+  );
 
   const synopsis = conversation.transformConversationOrGetCachedSynopsis(4);
 
@@ -199,9 +216,9 @@ Why does ${bot_name} bot need to consult external resources?
     const agentAnswer = await executor.call({ input: question.content });
 
     answer = new TTSDispatcher();
-  
+
     console.log("Agent answer> ", agentAnswer);
-  
+
     answer.addSentence(agentAnswer.output);
     answer.finalize();
   } catch (e) {
@@ -218,4 +235,5 @@ export {
   finalPrompt,
   summarizeConversation,
   extractQuestion,
+  loadedPackages,
 };

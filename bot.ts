@@ -3,7 +3,13 @@ import {
   EndBehaviorType,
   VoiceConnectionStatus,
 } from "@discordjs/voice";
-import { Client, GatewayIntentBits, ChannelType } from "discord.js";
+import {
+  Client,
+  GatewayIntentBits,
+  ChannelType,
+  REST,
+  Routes,
+} from "discord.js";
 import { OpusEncoder } from "@discordjs/opus";
 import { Transform, Writable } from "stream";
 import dotenv from "dotenv";
@@ -18,7 +24,8 @@ import {
   initPrompting,
   interimPrompt,
   finalPrompt,
-  ConversationContext,
+  type ConversationContext,
+  loadedPackages,
 } from "./prompting";
 import {
   conversation,
@@ -31,7 +38,7 @@ import { inspect } from "util";
 
 dotenv.config();
 
-const { TOKEN } = process.env;
+const { TOKEN, CLIENT_ID } = process.env;
 
 const client = new Client({
   intents: [
@@ -53,31 +60,6 @@ const isRecentDuplicate = (text: string) => {
   recentCalls.set(text, now);
   return false;
 };
-
-// const utteranceCallbackBuilder =
-//   (
-//     id: string,
-//     name: string,
-//     conversationContext: ConversationContext,
-//     callback: () => void
-//   ) =>
-//   async (text: string) => {
-//     console.log(`Utterance ${id} received: ${text}`);
-
-//     // FIXME - problem when moving to multi guild
-//     const dispatcher = new TTSDispatcher(conversation);
-
-//     const response = await finalPrompt(
-//       text,
-//       dispatcher,
-//       conversationContext,
-//       name,
-//       conversation.transformConversationOrGetCachedSynopsis(4)
-//     );
-
-//     callback();
-//     return response;
-//   };
 
 initTTS();
 initConversationDaemon();
@@ -139,10 +121,75 @@ const destroyActiveStream = (guildID: string, userID: string) => {
   }
 };
 
+const commands = [
+  {
+    name: "setdebugchannel",
+    description: "Set the debug channel",
+    options: [
+      {
+        name: "channel",
+        description: "The channel to set",
+        type: 7,
+        required: true,
+      },
+    ],
+  },
+  {
+    name: "listpackages",
+    description: "List all available packages",
+    option: [],
+  },
+];
+
+const rest = new REST({ version: "10" }).setToken(TOKEN);
+
+(async () => {
+  try {
+    console.log("Started refreshing application (/) commands.");
+
+    await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
+
+    console.log("Successfully reloaded application (/) commands.");
+  } catch (error) {
+    console.error(error);
+  }
+})();
+
+const debugChannelForGuild = new Map<string, string>();
+
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
+
+  const { commandName, options } = interaction;
+
+  if (commandName === "setdebugchannel") {
+    const channel = options.getChannel("channel", true);
+    if (channel.type !== ChannelType.GuildText) {
+      await interaction.reply({
+        content: "Channel must be a text channel",
+        ephemeral: true,
+      });
+      return;
+    }
+    debugChannelForGuild.set(interaction.guildId!, channel.id);
+    await interaction.reply({
+      content: `Debug channel set to ${channel.name}`,
+      ephemeral: true,
+    });
+  } else if (commandName === "listpackages") {
+    await interaction.reply({
+      content:
+        "Available packages: " +
+        loadedPackages.map((p) => p.name).join(", "),
+      ephemeral: true,
+    });
+  }
+});
+
 client.on("ready", () => {
   console.log("Discord client ready!");
 
-  // list all channels
+  // voice channel stuff
   client.guilds.cache.forEach((guild) => {
     for (const [channelID, channel] of guild.channels.cache) {
       if (channel.type === ChannelType.GuildVoice) {
@@ -192,7 +239,7 @@ client.on("ready", () => {
                     speechContexts: [
                       {
                         phrases: [bot_name],
-                        boost: 8.0,
+                        boost: 7.0,
                       },
                     ],
                   },
