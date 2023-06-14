@@ -44,7 +44,7 @@ const loadPackages = async (model: BaseLanguageModel) => {
       description: `Use this tool to get detailed information about ${name}`,
       func: async (query: string) => {
         const result = await answerChain.call({ query });
-        console.log("describe item result", result);
+        console.log("Reference Result", result);
         return result.text;
       },
     });

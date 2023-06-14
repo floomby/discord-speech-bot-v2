@@ -8,7 +8,7 @@ import {
 import fs from "fs";
 import net from "net";
 import { CondensedConversation, conversation } from "./conversation";
-import { bot_name } from "./config";
+import { bot_name, mocking } from "./config";
 import { extractQuestion } from "./prompting";
 import { LoadedPackage } from "./packageLoader";
 
@@ -18,19 +18,24 @@ const socket_file = "socket";
 const playingQueue: TTSDispatcher[] = [];
 let chronoIndex = 0;
 
+// FIXME: This needs a re-imagining. It is going to be problematic if not addressed as the project grows.
 export class TTSDispatcher {
   streamChronoIndex: number | null = null;
-  totalSegments: number | null = null;
-  segmentsReceived = 0;
+  totalUtterances: number | null = null;
+  utterancesReceived = 0;
+  utterances: string[] = [];
   hasErrored = false;
   nextToQueue = 0;
+  promises: Promise<undefined | TTSDispatcher>[] = [];
+  mocking = false;
 
   frozenConversation: CondensedConversation | null = null;
   activity: LoadedPackage | null = null;
 
-  private client: net.Socket;
-
-  constructor(conversation?: CondensedConversation, activity?: LoadedPackage) {
+  constructor(
+    conversation?: CondensedConversation,
+    activity?: LoadedPackage
+  ) {
     playingQueue.push(this);
     this.streamChronoIndex = chronoIndex;
     chronoIndex++;
@@ -42,52 +47,58 @@ export class TTSDispatcher {
     this.activity = activity || null;
   }
 
-  addSentence(sentence: string) {
-    if (this.totalSegments !== null) {
+  addUtterance(utterance: string) {
+    if (this.totalUtterances !== null) {
       throw new Error("TTSDispatcher has already been finalized");
     }
 
-    sentence = sentence.trim();
+    utterance = utterance.trim();
 
-    // if the sentence starts with ${bot_name}: or ${bot_name} bot: we should remove it
+    // if the utterance starts with ${bot_name}: or ${bot_name} bot: we should remove it
     const regex = new RegExp(`^${bot_name} *(bot)?: ?`, "i");
-    sentence = sentence.replace(regex, "").trim();
+    utterance = utterance.replace(regex, "").trim();
 
-    // add a space after every number in the sentence
-    sentence = sentence.replace(/(\d+)([^!?.,"'])/g, "$1 $2");
+    // add a space after every number in the utterance
+    utterance = utterance.replace(/(\d+)([^!?.,"'\s])/g, "$1 $2");
 
-    if (sentence.length === 0) {
+    if (utterance.length === 0) {
       return;
     }
 
-    this.client = net.createConnection(socket_file, () => {});
+    this.utterances.push(utterance);
 
-    this.client.write(
-      `${this.streamChronoIndex}:${this.segmentsReceived} ${sentence}`,
-      () => {
-        this.client.end();
-      }
-    );
+    if (!mocking.tts) {
+      const client = net.createConnection(socket_file, () => {});
+
+      client.write(
+        `${this.streamChronoIndex}:${this.utterancesReceived} ${utterance}`,
+        () => {
+          client.end();
+        }
+      );
+    }
 
     conversation.addUtterance({
       who: bot_name,
-      utterance: sentence,
+      utterance: utterance,
       time: new Date(),
     });
 
-    this.segmentsReceived++;
+    this.utterancesReceived++;
 
     if (this.frozenConversation) {
       // check if we need llm feedback (TODO I shouldn't do it here probably)
       const externalResourceRegex = /external resource/i;
-      if (externalResourceRegex.test(sentence)) {
-        extractQuestion(this.frozenConversation, this.activity);
+      if (externalResourceRegex.test(utterance)) {
+        this.promises.push(
+          extractQuestion(this.frozenConversation, this.activity)
+        );
       }
     }
   }
 
   finalize() {
-    this.totalSegments = this.segmentsReceived;
+    this.totalUtterances = this.utterancesReceived;
   }
 }
 
@@ -158,7 +169,7 @@ const playQueuer = () => {
   }
 
   const currentChronoIndex = playingQueue[0].streamChronoIndex;
-  const isFinalized = playingQueue[0].totalSegments !== null;
+  const isFinalized = playingQueue[0].totalUtterances !== null;
   const isErrored = playingQueue[0].hasErrored;
   const nextToQueue = playingQueue[0].nextToQueue;
 
@@ -166,7 +177,7 @@ const playQueuer = () => {
     throw new Error("TTSDispatcher has not been initialized");
   }
 
-  const isDone = isFinalized && nextToQueue >= playingQueue[0].totalSegments;
+  const isDone = isFinalized && nextToQueue >= playingQueue[0].totalUtterances;
 
   if (isDone || isErrored) {
     playingQueue.shift();

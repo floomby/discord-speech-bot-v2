@@ -1,3 +1,4 @@
+import fs from "fs";
 import { LoadedPackage } from "./packageLoader";
 import { loadedPackages, summarizeConversation } from "./prompting";
 
@@ -11,7 +12,7 @@ export class CondensedConversation {
   synopsis: string | null = null;
   lastUpdated: Date;
   dirty: boolean = false;
-  private conversation: ConversationElement[] = [];
+  conversation: ConversationElement[] = [];
 
   addUtterance(element: ConversationElement) {
     this.conversation.push(element);
@@ -112,12 +113,38 @@ const pickActivity = () => {
   activity = loadedPackages[0];
 };
 
-const init = () => {
+const init = (logging = false) => {
+  let logFile: fs.WriteStream | null = null;
+  let logLatentFile: fs.WriteStream | null = null;
+
+  logFile = fs.createWriteStream("conversation.log", { flags: "a" });
+  logLatentFile = fs.createWriteStream("latent-conversation.log", {
+    flags: "a",
+  });
+
   setInterval(() => {
     conversation.update();
     latentConversation.update(
       "You have overheard a conversation, give a short summary of the conversation paying more attention to the most recent utterances."
     );
+
+    if (logging) {
+      try {
+        if (conversation.dirty) {
+          logFile.write(
+            conversation.transformConversationOrGetCachedSynopsis(10) + "\n\n"
+          );
+        }
+    
+        if (latentConversation.dirty) {
+          logLatentFile.write(
+            latentConversation.transformConversationOrGetCachedSynopsis(10) + "\n\n"
+          );
+        }
+      } catch (e) {
+        console.error("Failed to write to log file", e);
+      }
+    }
   }, 1000 * 60 * 5);
 };
 

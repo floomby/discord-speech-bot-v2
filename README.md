@@ -17,9 +17,8 @@
 ### Short Term Roadmap
 
 - Context detection
-- Model boosting for named entities in the active context
 - Multi guild support
-- Regression testing against the prompts/agents
+- Work on writing some more regression tests against the prompts to get better coverage
 - fandom com scraper/packager notebook
 
 ### Notes / Thoughts

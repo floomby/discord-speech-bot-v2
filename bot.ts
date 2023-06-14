@@ -278,7 +278,7 @@ client.on("ready", () => {
                       time: new Date(),
                     });
 
-                    const dispatcher = new TTSDispatcher(conversation);
+                    const dispatcher = new TTSDispatcher(conversation, activity);
 
                     const response = await finalPrompt(
                       result,
@@ -344,7 +344,7 @@ client.on("ready", () => {
 initPrompting()
   .then(() => {
     client.login(TOKEN);
-    initConversationDaemon();
+    initConversationDaemon(true);
   })
   .catch(console.error);
 

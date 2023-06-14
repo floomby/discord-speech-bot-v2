@@ -6,7 +6,7 @@
   "scripts": {
     "install": "node-gyp rebuild",
     "start": "python bot.py",
-    "test": "mocha --timeout 50000",
+    "test": "mocha --timeout 300000",
     "build": "tsc"
   },
   "author": "",

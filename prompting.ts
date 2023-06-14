@@ -154,14 +154,14 @@ ${userName}: ${complete}
           const content = (choice.delta as { content?: string }).content;
           if (content) {
             if (content.includes("\n\n")) {
-              dispatcher.addSentence(acm + content);
+              dispatcher.addUtterance(acm + content);
               acm = "";
             } else {
               acm += content;
             }
           }
         } else {
-          dispatcher.addSentence(acm);
+          dispatcher.addUtterance(acm);
           dispatcher.finalize();
         }
       }
@@ -195,45 +195,54 @@ const extractQuestion = async (
   //   inspect(conversation, false, null, true)
   // );
 
-  const synopsis = conversation.transformConversationOrGetCachedSynopsis(4);
+//   const synopsis = conversation.transformConversationOrGetCachedSynopsis(4);
 
-  const chat = createChat({
-    apiKey: process.env.OPENAI_API_KEY,
-    model: "gpt-3.5-turbo",
-    messages: [
-      {
-        role: "system",
-        content: `You are privy to a conversation between a discord bot named ${bot_name} and users in a voice channel.`,
-      },
-    ],
-  });
+//   const chat = createChat({
+//     apiKey: process.env.OPENAI_API_KEY,
+//     model: "gpt-3.5-turbo",
+//     messages: [
+//       {
+//         role: "system",
+//         content: `You are privy to a conversation between a discord bot named ${bot_name} and users in a voice channel.`,
+//       },
+//     ],
+//   });
 
-  const response = await chat.sendMessage(
-    `${synopsis}
+//   const response = await chat.sendMessage(
+//     `${synopsis}
 
-======
-Why does ${bot_name} bot need to consult external resources?
-======
+// ======
+// Why does ${bot_name} bot need to consult external resources?
+// ======
 
-`
-  );
+// `
+//   );
 
-  const ret = response.content;
+//   const ret = response.content;
 
-  console.log("Intermediate question> ", ret);
+//   console.log("Intermediate question> ", ret);
 
-  // THIS PROMPT IS NOT WORKING WELL !!!!
-  const question = await chat.sendMessage(
-    `Rephrase what is being asked of ${bot_name} bot into a question. If it seems like there are multiple questions, choose only the last question.`
-  );
+//   // THIS PROMPT IS NOT WORKING WELL !!!!
+//   const question = await chat.sendMessage(
+//     `Rephrase what is being asked of ${bot_name} bot into a question. If it seems like there are multiple questions, choose only the last question.`
+//   );
 
-  console.log("Final question> ", question.content);
+  // const finalQuestion = question.content;
+
+  const finalQuestion = conversation.conversation[conversation.conversation.length - 1].utterance;
+
+  if (!finalQuestion) {
+    console.warn("No final question found in conversation!!!");
+    return;
+  }
+  
+  console.log("Final question> ", finalQuestion);
 
   let showActivityHint = false;
 
   if (activity) {
     showActivityHint = await isQuestionAboutActivity(
-      question.content,
+      finalQuestion,
       activity
     );
   }
@@ -245,14 +254,14 @@ Why does ${bot_name} bot need to consult external resources?
         showActivityHint
           ? `[HINT: This question may be about ${activity.name}] `
           : ""
-      }${question.content}`,
+      }${finalQuestion}`,
     });
 
     answer = new TTSDispatcher();
 
     console.log("Agent answer> ", agentAnswer);
 
-    answer.addSentence(agentAnswer.output);
+    answer.addUtterance(agentAnswer.output);
     answer.finalize();
   } catch (e) {
     console.error(e);
@@ -260,6 +269,8 @@ Why does ${bot_name} bot need to consult external resources?
       answer.hasErrored = true;
     }
   }
+
+  return answer;
 };
 
 const isQuestionAboutActivity = async (
