@@ -31,42 +31,42 @@ describe("Testing for all prompts", () => {
     expect(activity?.name).to.equal("Risk of Rain 2");
   });
 
-  // it("Tests if the vectorstore is loaded correctly", async () => {
-  //   const vectorStore = activity?.vectorStore;
+  it("Tests if the vectorstore is loaded correctly", async () => {
+    const vectorStore = activity?.vectorStore;
 
-  //   expect(vectorStore).to.exist;
+    expect(vectorStore).to.exist;
 
-  //   const result = await vectorStore.similaritySearch(
-  //     "What does the plasma shrimp do?",
-  //     1
-  //   );
+    const result = await vectorStore.similaritySearch(
+      "What does the plasma shrimp do?",
+      1
+    );
 
-  //   expect(result[0]?.pageContent).to.exist;
+    expect(result[0]?.pageContent).to.exist;
 
-  //   expect(result[0]?.pageContent).to.contain("Plasma Shrimp");
-  // });
+    expect(result[0]?.pageContent).to.contain("Plasma Shrimp");
+  });
 
-  // it("Tests if the standalone prompt is working", async () => {
-  //   expect(activity).to.exist;
+  it("Tests if the standalone prompt is working", async () => {
+    expect(activity).to.exist;
 
-  //   const result0 = await isQuestionStandalone(
-  //     "What does the plasma shrimp do?",
-  //     activity
-  //   );
-  //   expect(result0).to.be.true;
+    const result0 = await isQuestionStandalone(
+      "What does the plasma shrimp do?",
+      activity
+    );
+    expect(result0).to.be.true;
 
-  //   const result1 = await isQuestionStandalone(
-  //     "What is the weather like today?",
-  //     activity
-  //   );
-  //   expect(result1).to.be.false;
+    const result1 = await isQuestionStandalone(
+      "What is the weather like today?",
+      activity
+    );
+    expect(result1).to.be.false;
 
-  //   const result2 = await isQuestionStandalone(
-  //     "How should I make a pizza?",
-  //     activity
-  //   );
-  //   expect(result2).to.be.false;
-  // });
+    const result2 = await isQuestionStandalone(
+      "How should I make a pizza?",
+      activity
+    );
+    expect(result2).to.be.false;
+  });
 
   it("Tests the whole prompting pipeline from a fresh conversation start", async () => {
     const utterance = "What does the plasma shrimp do?";

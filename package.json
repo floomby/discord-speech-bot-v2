@@ -4,14 +4,12 @@
   "description": "whisper-wrapper",
   "main": "index.js",
   "scripts": {
-    "install": "node-gyp rebuild",
     "start": "python bot.py",
     "test": "mocha --timeout 300000",
     "build": "tsc"
   },
   "author": "",
   "license": "ISC",
-  "gypfile": true,
   "dependencies": {
     "@discordjs/opus": "^0.9.0",
     "@discordjs/voice": "^0.16.0",
