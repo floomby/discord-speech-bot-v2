@@ -26,6 +26,17 @@ canned_responses["think_7"] = "Allow me to consider that."
 canned_responses["think_8"] = "This is a tough one, let me think about that."
 canned_responses["think_9"] = "Hmm, this is a tough one, let me think about that."
 
+canned_responses["sensors_0"] = "I'm not sure, let me check my sensors."
+canned_responses["sensors_1"] = "I am going to use my sensors."
+canned_responses["sensors_2"] = "I need to use my sensors."
+canned_responses["sensors_3"] = "I will check my sensors."
+canned_responses["sensors_4"] = "I will use my sensors to find out."
+canned_responses["sensors_5"] = "I will use my sensors to figure that out."
+canned_responses["sensors_6"] = "I am going to use my sensors to find the answer."
+canned_responses["sensors_7"] = "I will use my sensors to figure out the answer."
+canned_responses["sensors_8"] = "I will use my sensors to find the solution."
+canned_responses["sensors_9"] = "My sensors will help me find the solution."
+
 for response in canned_responses:
   if not os.path.exists(f"{canned_responses_dir}/{response}.wav"):
     tts.tts_to_file(canned_responses[response], file_path=f"{canned_responses_dir}/{response}.wav", emotion="Neutral")

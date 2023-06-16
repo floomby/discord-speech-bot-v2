@@ -50,27 +50,27 @@ describe("Testing for all prompts", () => {
   //   expect(activity).to.exist;
 
   //   const result0 = await isQuestionStandalone(
-  //     "What does the plasma shrimp do?",
+  //     "what does the plasma shrimp do",
   //     activity
   //   );
   //   expect(result0).to.be.true;
 
   //   const result1 = await isQuestionStandalone(
-  //     "What is the weather like today?",
+  //     "what is the weather like today",
   //     activity
   //   );
   //   expect(result1).to.be.false;
 
   //   const result2 = await isQuestionStandalone(
-  //     "How should I make a pizza?",
+  //     "how should I make a pizza",
   //     activity
   //   );
   //   expect(result2).to.be.false;
   // });
 
   // it("Tests the whole prompting pipeline from a fresh conversation start", async () => {
-  //   const utterance = "What does the plasma shrimp do?";
-  //   const userName = "Floomby";
+  //   const utterance = `${bot_name} what does the plasma shrimp do`;
+  //   const userName = "therealfloomby";
 
   //   const conversation = new CondensedConversation();
   //   const latentConversation = new CondensedConversation();
@@ -141,5 +141,41 @@ describe("Testing for all prompts", () => {
     expect(dispatcher.children.length).to.equal(0);
 
     expect(/floomby/i.test(dispatcher.utterances[0])).to.be.true;
+  });
+
+  it("Tests activity awareness", async () => {
+    const utterance = `${bot_name} are we playing risk of rain`;
+    const userName = "therealfloomby";
+    const userName2 = "aynpseudorand";
+
+    const conversation = new CondensedConversation();
+    const latentConversation = new CondensedConversation();
+
+    conversation.addUtterance({
+      who: userName,
+      utterance,
+      time: new Date(),
+    });
+
+    expect(activity).to.exist;
+
+    const dispatcher = new TTSDispatcher(conversation, activity);
+
+    await finalPrompt(
+      utterance,
+      dispatcher,
+      { usersInChannel: [bot_name, userName, userName2] },
+      userName,
+      conversation.transformConversationOrGetCachedSynopsis(4),
+      latentConversation,
+      activity
+    );
+
+    // This should not fire off a child prompt
+    expect(dispatcher.children.length).to.equal(0);
+
+    console.log(dispatcher.utterances);
+
+    // expect(/floomby/i.test(dispatcher.utterances[0])).to.be.true;
   });
 });

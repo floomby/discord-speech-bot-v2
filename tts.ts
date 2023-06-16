@@ -15,12 +15,14 @@ const socket_file = "socket";
 const output_dir = "tts_output";
 const canned_responses_dir = "canned_responses";
 
-enum CannedResponse {
+export enum CannedResponse {
   Think = "think",
+  Sensors = "sensors",
 }
 
 const cannedResponses: Record<CannedResponse, string> = {
   [CannedResponse.Think]: "I need a moment to think.",
+  [CannedResponse.Sensors]: "I need to check my sensors.",
 };
 
 // FIXME: Problematic global state
@@ -54,7 +56,7 @@ export class TTSDispatcher {
   }
 
   playCannedResponse(cannedResponse: CannedResponse) {
-    // TODO This shouldn't be hardcoded
+    // TODO This number shouldn't be hardcoded
     const randomness = Math.floor(Math.random() * 10);
 
     if (!mocking.tts) {

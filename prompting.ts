@@ -1,10 +1,9 @@
 // import { Configuration, OpenAIApi } from "openai";
-import { createChat } from "./streamingChat/createChat";
-import { Message } from "./streamingChat/createCompletions";
+import { createChat, type Message } from "completions";
 
 import { bot_name } from "./config";
 import { CondensedConversation } from "./conversation";
-import { TTSDispatcher } from "./tts";
+import { CannedResponse, TTSDispatcher } from "./tts";
 
 import { inspect } from "util";
 
@@ -13,6 +12,7 @@ import { initializeAgentExecutorWithOptions } from "langchain/agents";
 import { SerpAPI } from "langchain/tools";
 import { Calculator } from "langchain/tools/calculator";
 import { LoadedPackage, loadPackages } from "./packageLoader";
+import { SensorSchema, useSensors } from "./sensors";
 
 // let openai: OpenAIApi | undefined;
 
@@ -45,7 +45,7 @@ const init = async () => {
 };
 
 const interimPrompt = (fragments: string[]) => {
-  // TODO implement
+  // TODO? implement if we want to pre-run on un-finalized asr
 };
 
 export type ConversationContext = {
@@ -60,6 +60,8 @@ const finalSystem = (
 ) => {
   return `You are ${bot_name} a discord bot in a voice channel know for being concise with your responses.
 
+You have sensors that are connected to the discord channel and the games and activities that happen here.
+
 The current date time is ${new Date().toString()}.
 
 The discord voice channel currently has the following users: ${context.usersInChannel.join(
@@ -67,11 +69,7 @@ The discord voice channel currently has the following users: ${context.usersInCh
   )}
 
 You will need to consult external resources to learn about current events.
-${
-  activity
-    ? `\n${activity.name} is going on in the background in a different channel. If the question is about this say you need to use external resources.\n`
-    : ""
-}
+${activity ? `\nWe are doing ${activity.name}.\n` : ""}
 The following is the conversation that has occurred so far:${
     !!latentConversation.synopsis
       ? `\n\n[Hint: ${latentConversation.synopsis}]`
@@ -96,8 +94,51 @@ const finalPrompt = async (
   latentConversation: CondensedConversation,
   activity: LoadedPackage | null
 ) => {
-  const messages: Message[] = [
-    {
+  try {
+    const chat = createChat({
+      apiKey: process.env.OPENAI_API_KEY,
+      model: "gpt-3.5-turbo-0613",
+      functionCall: "auto",
+      functions: [
+        {
+          name: "answer_difficult_question",
+          description:
+            "Providers answers to questions which require more context, real time data, or external resources.",
+          parameters: {
+            type: "object",
+            properties: {
+              question: {
+                type: "string",
+                description: "The question to answer.",
+              },
+            },
+            required: ["question"],
+          },
+        },
+        {
+          name: "use_sensors",
+          description:
+            "Uses sensors to provide information about the current activity, information on other channels, and past information on this channel.",
+          parameters: {
+            type: "object",
+            properties: {
+              query: {
+                type: "string",
+                description: "What to query the sensors for.",
+              },
+              which_sensor: {
+                type: "string",
+                enum: ["activity", "channel", "past"],
+                description: "Which sensor to query.",
+              },
+            },
+            required: ["query", "which_sensor"],
+          },
+        },
+      ],
+    });
+
+    chat.addMessage({
       role: "system",
       content: finalSystem(
         conversationContext,
@@ -105,54 +146,28 @@ const finalPrompt = async (
         latentConversation,
         activity
       ),
-    },
-    {
-      role: "user",
-      content: `When you respond, skip two lines in between each sentence.
-
-Do not say anymore than you need to.
-
-`,
-    },
-    {
-      role: "assistant",
-      content: `I am ${bot_name} bot.\n
-I understand that I need to skip two lines in between each sentence when I respond.
-
-`,
-    },
-  ];
-
-  // console.log(inspect(messages, false, null, true));
-
-  try {
-    const chat = createChat({
-      apiKey: process.env.OPENAI_API_KEY,
-      model: "gpt-3.5-turbo-0613",
-      messages,
-      functionCall: "auto",
-      functions: [
-        {
-          name: "answer_difficult_question",
-          description: "Providers answers to questions which require more context, real time data, or external resources.",
-          parameters: {
-            type: "object",
-            properties: {
-              question: {
-                type: "string",
-                description: "The question to answer.",
-              }
-            },
-            required: ["question"],
-          },
-        },
-      ]
     });
+    //     chat.addMessage({
+    //       role: "user",
+    //       content: `When you respond, skip two lines in between each sentence.
+
+    // Do not say anymore than you need to when you respond.
+
+    // `,
+    //     });
+    //     chat.addMessage({
+    //       role: "assistant",
+    //       content: `I am ${bot_name} bot.
+
+    // I understand that I need to skip two lines in between each sentence when I respond.
+
+    // `,
+    //     });
 
     let acm = "";
 
     const response = await chat.sendMessage(
-      `Answer the question asked by ${userName}.
+      `Respond question asked by ${userName}.
 
 ======
 QUESTION: ${complete}
@@ -161,10 +176,25 @@ QUESTION: ${complete}
 `,
       (message) => {
         const choice = message.message.choices[0];
-        if ((choice.delta as { function_call?: string } | undefined)?.function_call) {
+        if (
+          (choice.delta as { function_call?: { name: string } } | undefined)
+            ?.function_call
+        ) {
           if (!dispatcher.isFinalized()) {
-            dispatcher.addUtterance("Give me a moment to think.");
-            dispatcher.finalize();
+            // dispatcher.addUtterance("Give me a moment to think.");
+            // dispatcher.finalize();
+            const name = (choice.delta as { function_call?: { name: string } }).function_call.name;
+
+            switch (name) {
+              case "answer_difficult_question":
+                dispatcher.playCannedResponse(CannedResponse.Think);
+                dispatcher.finalize();
+                break;
+              case "use_sensors":
+                dispatcher.playCannedResponse(CannedResponse.Sensors);
+                dispatcher.finalize();
+                break;
+            }
           }
         } else {
           if (dispatcher.isFinalized()) {
@@ -189,12 +219,34 @@ QUESTION: ${complete}
       }
     );
 
+    if (!dispatcher.isFinalized()) {
+      console.log("!!!! This is a bug. Unfinalized dispatcher after response completed.");
+      dispatcher.finalize();
+    }
+
     if (response.function_call) {
       try {
-        const question = JSON.parse(response.function_call.arguments).question;
-        dispatcher.addChild(answerQuestion(question, activity));
+        switch (response.function_call.name) {
+          case "answer_difficult_question":
+            const question = JSON.parse(
+              response.function_call.arguments
+            ).question;
+            dispatcher.addChild(answerQuestion(question, activity));
+            break;
+          case "use_sensors":
+            const parameters = SensorSchema.parse(
+              JSON.parse(response.function_call.arguments)
+            );
+            // dispatcher.addChild(useSensors(parameters));
+            useSensors(parameters);
+            break;
+          default:
+            throw new Error(
+              `Unknown function call: ${response.function_call.name}`
+            );
+        }
       } catch (e) {
-        console.error("Failed to parse question from function call.");
+        console.error("Chat function call failed:", e);
       }
     }
   } catch (e) {
@@ -224,10 +276,7 @@ const answerQuestion = async (
   let showActivityHint = false;
 
   if (activity) {
-    showActivityHint = await isQuestionAboutActivity(
-      question,
-      activity
-    );
+    showActivityHint = await isQuestionAboutActivity(question, activity);
   }
 
   let answer: TTSDispatcher | undefined;

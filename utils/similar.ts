@@ -1,4 +1,4 @@
-import { createChat } from "../streamingChat/createChat";
+import { createChat } from "completions";
 
 const areTextsSimilar = async (text0: string, text1: string) => {
   const chat = createChat({
