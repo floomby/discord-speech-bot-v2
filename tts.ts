@@ -5,13 +5,23 @@ import {
   createAudioPlayer,
   createAudioResource,
 } from "@discordjs/voice";
-import fs from "fs";
+import fs, { copyFile } from "fs";
 import net from "net";
 import { CondensedConversation, conversation } from "./conversation";
 import { bot_name, mocking } from "./config";
 import { LoadedPackage } from "./packageLoader";
 
 const socket_file = "socket";
+const output_dir = "tts_output";
+const canned_responses_dir = "canned_responses";
+
+enum CannedResponse {
+  Think = "think",
+}
+
+const cannedResponses: Record<CannedResponse, string> = {
+  [CannedResponse.Think]: "I need a moment to think.",
+};
 
 // FIXME: Problematic global state
 const playingQueue: TTSDispatcher[] = [];
@@ -31,10 +41,7 @@ export class TTSDispatcher {
   frozenConversation: CondensedConversation | null = null;
   activity: LoadedPackage | null = null;
 
-  constructor(
-    conversation?: CondensedConversation,
-    activity?: LoadedPackage
-  ) {
+  constructor(conversation?: CondensedConversation, activity?: LoadedPackage) {
     playingQueue.push(this);
     this.streamChronoIndex = chronoIndex;
     chronoIndex++;
@@ -44,6 +51,30 @@ export class TTSDispatcher {
       this.frozenConversation = conversation.clone();
     }
     this.activity = activity || null;
+  }
+
+  playCannedResponse(cannedResponse: CannedResponse) {
+    // TODO This shouldn't be hardcoded
+    const randomness = Math.floor(Math.random() * 10);
+
+    if (!mocking.tts) {
+      copyFile(
+        `${canned_responses_dir}/${cannedResponse}_${randomness}.wav`,
+        `${output_dir}/${this.streamChronoIndex}:${this.utterances.length}.wav`,
+        (err) => {
+          if (err) {
+            console.error("Canned response error:", err);
+          }
+        }
+      );
+    }
+
+    this.utterances.push(cannedResponses[cannedResponse]);
+    conversation.addUtterance({
+      who: bot_name,
+      utterance: cannedResponses[cannedResponse],
+      time: new Date(),
+    });
   }
 
   addUtterance(utterance: string) {
@@ -64,30 +95,27 @@ export class TTSDispatcher {
       return;
     }
 
-    this.utterances.push(utterance);
-
     if (!mocking.tts) {
       const client = net.createConnection(socket_file, () => {});
 
       client.write(
-        `${this.streamChronoIndex}:${this.utterancesReceived} ${utterance}`,
+        `${this.streamChronoIndex}:${this.utterances.length} ${utterance}`,
         () => {
           client.end();
         }
       );
     }
 
+    this.utterances.push(utterance);
     conversation.addUtterance({
       who: bot_name,
       utterance: utterance,
       time: new Date(),
     });
-
-    this.utterancesReceived++;
   }
 
   finalize() {
-    this.totalUtterances = this.utterancesReceived;
+    this.totalUtterances = this.utterances.length;
   }
 
   isFinalized() {
@@ -102,8 +130,6 @@ export class TTSDispatcher {
 type TTSMetadata = {
   title: string;
 };
-// Creates a client
-const output_dir = "tts_output";
 
 // FIXME: Problematic global state
 let connection: null | VoiceConnection = null;

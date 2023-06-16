@@ -9,6 +9,7 @@ import {
   ChannelType,
   REST,
   Routes,
+  VoiceChannel,
 } from "discord.js";
 import { OpusEncoder } from "@discordjs/opus";
 import { Transform, Writable } from "stream";
@@ -140,6 +141,19 @@ const commands = [
     description: "List all available packages",
     option: [],
   },
+  {
+    name: "say",
+    description:
+      "Act as if you said something (useful for when you are debugging in a noisy environment)",
+    options: [
+      {
+        name: "text",
+        description: "The text to say",
+        type: 3,
+        required: true,
+      },
+    ],
+  },
 ];
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -181,6 +195,16 @@ client.on("interactionCreate", async (interaction) => {
     await interaction.reply({
       content:
         "Available packages: " + loadedPackages.map((p) => p.name).join(", "),
+      ephemeral: true,
+    });
+  } else if (commandName === "say") {
+    const userName = interaction.user.username;
+    const text = options.getString("text", true);
+
+    mainPrompt(text, userName);
+
+    await interaction.reply({
+      content: `Said \`${text}\``,
       ephemeral: true,
     });
   }
@@ -270,36 +294,7 @@ client.on("ready", () => {
                     return;
                   }
 
-                  const hotRegex = new RegExp(bot_name, "i");
-                  if (hotRegex.test(result)) {
-                    conversation.addUtterance({
-                      who: userName,
-                      utterance: result,
-                      time: new Date(),
-                    });
-
-                    const dispatcher = new TTSDispatcher(conversation, activity);
-
-                    const response = await finalPrompt(
-                      result,
-                      dispatcher,
-                      {
-                        usersInChannel: channel.members.map((member) =>
-                          fixNames(member.user.username)
-                        ),
-                      },
-                      userName,
-                      conversation.transformConversationOrGetCachedSynopsis(4),
-                      latentConversation,
-                      activity
-                    );
-                  } else {
-                    latentConversation.addUtterance({
-                      who: userName,
-                      utterance: result,
-                      time: new Date(),
-                    });
-                  }
+                  mainPrompt(result, userName, channel);
                 })
                 .on("end", () => {
                   // console.log("speech stream ended");
@@ -359,5 +354,42 @@ class OpusDecodingStream extends Transform {
   _transform(data, encoding, callback) {
     this.push(this.encoder.decode(data));
     callback();
+  }
+}
+
+async function mainPrompt(
+  test: string,
+  userName: string,
+  channel?: VoiceChannel
+) {
+  const hotRegex = new RegExp(bot_name, "i");
+  if (hotRegex.test(test)) {
+    conversation.addUtterance({
+      who: userName,
+      utterance: test,
+      time: new Date(),
+    });
+
+    const dispatcher = new TTSDispatcher(conversation, activity);
+
+    const response = await finalPrompt(
+      test,
+      dispatcher,
+      {
+        usersInChannel: channel?.members.map((member) =>
+          fixNames(member.user.username)
+        ) ?? [bot_name, userName],
+      },
+      userName,
+      conversation.transformConversationOrGetCachedSynopsis(4),
+      latentConversation,
+      activity
+    );
+  } else {
+    latentConversation.addUtterance({
+      who: userName,
+      utterance: test,
+      time: new Date(),
+    });
   }
 }

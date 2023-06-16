@@ -62,16 +62,16 @@ const finalSystem = (
 
 The current date time is ${new Date().toString()}.
 
+The discord voice channel currently has the following users: ${context.usersInChannel.join(
+    ", "
+  )}
+
 You will need to consult external resources to learn about current events.
 ${
   activity
     ? `\n${activity.name} is going on in the background in a different channel. If the question is about this say you need to use external resources.\n`
     : ""
 }
-The discord voice channel has the following users: ${context.usersInChannel.join(
-    ", "
-  )}
-
 The following is the conversation that has occurred so far:${
     !!latentConversation.synopsis
       ? `\n\n[Hint: ${latentConversation.synopsis}]`
@@ -271,7 +271,7 @@ const isQuestionAboutActivity = async (
     `Data: ${stringified}\n\n======\nQUESTION: ${question}\n======\n\ndoes anything in this data pertain to this question ("Yes" or "No")?`
   );
 
-  console.log("Is question about data> ", response.content);
+  // console.log("Is question about data> ", response.content);
 
   return /yes/i.test(response.content);
 };

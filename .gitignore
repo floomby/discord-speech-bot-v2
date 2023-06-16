@@ -7,6 +7,7 @@ node_modules
 .env
 *.js
 tts_output
+canned_responses
 testing
 keys
 *.log

@@ -1,5 +1,5 @@
 ### Tasks
 
-- Finish rework of entry point prompt
-- Rework the feedback system to use functions
-- Pre canned trampoline responses (more speed, lfg)
+- Initial prompt is failing to use the function sometimes, also the sentence line skipping is not working well
+- Work on testing
+- Finish pr to completion module so that I can just use that instead of duplicating the code here

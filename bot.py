@@ -9,6 +9,26 @@ model_name = "tts_models/en/jenny/jenny"
 tts = TTS(model_name, gpu=True)
 
 output_dir = "tts_output"
+canned_responses_dir = "canned_responses"
+
+if not os.path.exists(canned_responses_dir):
+  os.makedirs(canned_responses_dir)
+
+canned_responses = {}
+canned_responses["think_0"] = "Hmm, I need a moment to think about that."
+canned_responses["think_1"] = "Let me think about that for a moment."
+canned_responses["think_2"] = "Give me a moment to think about that."
+canned_responses["think_3"] = "Allow me to consider that for a moment."
+canned_responses["think_4"] = "I need a moment to think."
+canned_responses["think_5"] = "Let me think about that."
+canned_responses["think_6"] = "Give me a moment to think."
+canned_responses["think_7"] = "Allow me to consider that."
+canned_responses["think_8"] = "This is a tough one, let me think about that."
+canned_responses["think_9"] = "Hmm, this is a tough one, let me think about that."
+
+for response in canned_responses:
+  if not os.path.exists(f"{canned_responses_dir}/{response}.wav"):
+    tts.tts_to_file(canned_responses[response], file_path=f"{canned_responses_dir}/{response}.wav", emotion="Neutral")
 
 # ensure output directory exists
 if not os.path.exists(output_dir):
