@@ -9,7 +9,6 @@ import fs from "fs";
 import net from "net";
 import { CondensedConversation, conversation } from "./conversation";
 import { bot_name, mocking } from "./config";
-import { extractQuestion } from "./prompting";
 import { LoadedPackage } from "./packageLoader";
 
 const socket_file = "socket";
@@ -26,7 +25,7 @@ export class TTSDispatcher {
   utterances: string[] = [];
   hasErrored = false;
   nextToQueue = 0;
-  promises: Promise<undefined | TTSDispatcher>[] = [];
+  children: Promise<undefined | TTSDispatcher>[] = [];
   mocking = false;
 
   frozenConversation: CondensedConversation | null = null;
@@ -85,20 +84,18 @@ export class TTSDispatcher {
     });
 
     this.utterancesReceived++;
-
-    if (this.frozenConversation) {
-      // check if we need llm feedback (TODO I shouldn't do it here probably)
-      const externalResourceRegex = /external resource/i;
-      if (externalResourceRegex.test(utterance)) {
-        this.promises.push(
-          extractQuestion(this.frozenConversation, this.activity)
-        );
-      }
-    }
   }
 
   finalize() {
     this.totalUtterances = this.utterancesReceived;
+  }
+
+  isFinalized() {
+    return this.totalUtterances !== null;
+  }
+
+  addChild(child: Promise<undefined | TTSDispatcher>) {
+    this.children.push(child);
   }
 }
 

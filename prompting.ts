@@ -110,11 +110,7 @@ const finalPrompt = async (
       role: "user",
       content: `When you respond, skip two lines in between each sentence.
 
-If you need to look something up just say "I need to consult external resources"
-
 Do not say anymore than you need to.
-
-If you need to consult external only response should be "I need to consult external resources".
 
 `,
     },
@@ -122,8 +118,6 @@ If you need to consult external only response should be "I need to consult exter
       role: "assistant",
       content: `I am ${bot_name} bot.\n
 I understand that I need to skip two lines in between each sentence when I respond.
-
-I understand that if I need to look something up I should say "I need to consult external resources".
 
 `,
     },
@@ -134,38 +128,75 @@ I understand that if I need to look something up I should say "I need to consult
   try {
     const chat = createChat({
       apiKey: process.env.OPENAI_API_KEY,
-      model: "gpt-3.5-turbo",
+      model: "gpt-3.5-turbo-0613",
       messages,
+      functionCall: "auto",
+      functions: [
+        {
+          name: "answer_difficult_question",
+          description: "Providers answers to questions which require more context, real time data, or external resources.",
+          parameters: {
+            type: "object",
+            properties: {
+              question: {
+                type: "string",
+                description: "The question to answer.",
+              }
+            },
+            required: ["question"],
+          },
+        },
+      ]
     });
 
     let acm = "";
 
-    await chat.sendMessage(
-      `Answer the question remembering that if you need to consult external resources, you should say only "I need to consult external resources".
+    const response = await chat.sendMessage(
+      `Answer the question asked by ${userName}.
 
 ======
-${userName}: ${complete}
+QUESTION: ${complete}
 ======
 
 `,
       (message) => {
         const choice = message.message.choices[0];
-        if (!choice.finish_reason) {
-          const content = (choice.delta as { content?: string }).content;
-          if (content) {
-            if (content.includes("\n\n")) {
-              dispatcher.addUtterance(acm + content);
-              acm = "";
-            } else {
-              acm += content;
-            }
+        if ((choice.delta as { function_call?: string } | undefined)?.function_call) {
+          if (!dispatcher.isFinalized()) {
+            dispatcher.addUtterance("Give me a moment to think.");
+            dispatcher.finalize();
           }
         } else {
-          dispatcher.addUtterance(acm);
-          dispatcher.finalize();
+          if (dispatcher.isFinalized()) {
+            // console.log("WARNING: received response after finalization.");
+          } else {
+            if (!choice.finish_reason) {
+              const content = (choice.delta as { content?: string }).content;
+              if (content) {
+                if (content.includes("\n\n")) {
+                  dispatcher.addUtterance(acm + content);
+                  acm = "";
+                } else {
+                  acm += content;
+                }
+              }
+            } else {
+              dispatcher.addUtterance(acm);
+              dispatcher.finalize();
+            }
+          }
         }
       }
     );
+
+    if (response.function_call) {
+      try {
+        const question = JSON.parse(response.function_call.arguments).question;
+        dispatcher.addChild(answerQuestion(question, activity));
+      } catch (e) {
+        console.error("Failed to parse question from function call.");
+      }
+    }
   } catch (e) {
     console.error(e);
     dispatcher.hasErrored = true;
@@ -186,63 +217,15 @@ const summarizeConversation = async (
   );
 };
 
-const extractQuestion = async (
-  conversation: CondensedConversation,
+const answerQuestion = async (
+  question: string,
   activity: LoadedPackage | null
 ) => {
-  // console.log(
-  //   "extracting question from conversation",
-  //   inspect(conversation, false, null, true)
-  // );
-
-//   const synopsis = conversation.transformConversationOrGetCachedSynopsis(4);
-
-//   const chat = createChat({
-//     apiKey: process.env.OPENAI_API_KEY,
-//     model: "gpt-3.5-turbo",
-//     messages: [
-//       {
-//         role: "system",
-//         content: `You are privy to a conversation between a discord bot named ${bot_name} and users in a voice channel.`,
-//       },
-//     ],
-//   });
-
-//   const response = await chat.sendMessage(
-//     `${synopsis}
-
-// ======
-// Why does ${bot_name} bot need to consult external resources?
-// ======
-
-// `
-//   );
-
-//   const ret = response.content;
-
-//   console.log("Intermediate question> ", ret);
-
-//   // THIS PROMPT IS NOT WORKING WELL !!!!
-//   const question = await chat.sendMessage(
-//     `Rephrase what is being asked of ${bot_name} bot into a question. If it seems like there are multiple questions, choose only the last question.`
-//   );
-
-  // const finalQuestion = question.content;
-
-  const finalQuestion = conversation.conversation[conversation.conversation.length - 1].utterance;
-
-  if (!finalQuestion) {
-    console.warn("No final question found in conversation!!!");
-    return;
-  }
-  
-  console.log("Final question> ", finalQuestion);
-
   let showActivityHint = false;
 
   if (activity) {
     showActivityHint = await isQuestionAboutActivity(
-      finalQuestion,
+      question,
       activity
     );
   }
@@ -254,7 +237,7 @@ const extractQuestion = async (
         showActivityHint
           ? `[HINT: This question may be about ${activity.name}] `
           : ""
-      }${finalQuestion}`,
+      }${question}`,
     });
 
     answer = new TTSDispatcher();
@@ -299,6 +282,5 @@ export {
   interimPrompt,
   finalPrompt,
   summarizeConversation,
-  extractQuestion,
   isQuestionAboutActivity as isQuestionStandalone,
 };
