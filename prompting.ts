@@ -81,7 +81,7 @@ Use the cached sensor data if you can.
 
 You should use your encyclopedia if you are even a little unsure of the answer.
 
-The following is the conversation that has occurred so far ======${
+The following is a recent portion of the conversation that has occurred so far ======${
     !!latentConversation.synopsis
       ? `\n\n[Hint: ${latentConversation.synopsis}]`
       : ""
