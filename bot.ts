@@ -33,6 +33,7 @@ import {
   conversation,
   initConversationDaemon,
   latentConversation,
+  pickActivity,
 } from "./conversation";
 import { bot_name } from "./config";
 import { v1p1beta1 as speech } from "@google-cloud/speech";
@@ -212,6 +213,9 @@ client.on("interactionCreate", async (interaction) => {
 
 client.on("ready", () => {
   console.log("Discord client ready!");
+
+  // TODO Fix this such that it actually is picked based on the latent conversation or user presence (preferable)
+  pickActivity();
 
   // voice channel stuff
   client.guilds.cache.forEach((guild) => {

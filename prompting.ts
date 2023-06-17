@@ -14,6 +14,8 @@ import { Calculator } from "langchain/tools/calculator";
 import { LoadedPackage, loadPackages } from "./packageLoader";
 import { SensorSchema, useSensors } from "./sensors";
 
+export type Chat = ReturnType<typeof createChat>;
+
 // let openai: OpenAIApi | undefined;
 
 // FIXME: Problematic global state
@@ -58,18 +60,23 @@ const finalSystem = (
   latentConversation: CondensedConversation,
   activity: LoadedPackage | null
 ) => {
-  return `You are ${bot_name} a discord bot in a voice channel know for being concise with your responses.
+  const ret = `You are ${bot_name} a discord bot in a voice channel know for being concise with your responses.
 
 You have sensors that are connected to the discord channel and the games and activities that happen here.
 
-The current date time is ${new Date().toString()}.
+Cached sensor data is available so that you don't have to use the sensors for every response.
 
-The discord voice channel currently has the following users: ${context.usersInChannel.join(
-    ", "
-  )}
+{
+  "sensor_data": {
+    "date_time": "${new Date().toString()}",
+    "current_activity": ${JSON.stringify(activity?.name)},
+    "users_in_channel": ${JSON.stringify(context.usersInChannel)},
+    "additional_data": "<not cached - query sensors if needed>"
+  },
+}
 
-You will need to consult external resources to learn about current events.
-${activity ? `\nWe are doing ${activity.name}.\n` : ""}
+Use the cached sensor data if you can.
+
 The following is the conversation that has occurred so far:${
     !!latentConversation.synopsis
       ? `\n\n[Hint: ${latentConversation.synopsis}]`
@@ -83,6 +90,9 @@ Skip two lines between every sentence in your response.
 Be concise with your responses.
 
 `;
+  console.log(ret);
+
+  return ret;
 };
 
 const finalPrompt = async (
@@ -118,7 +128,7 @@ const finalPrompt = async (
         {
           name: "use_sensors",
           description:
-            "Uses sensors to provide information about the current activity, information on other channels, and past information on this channel.",
+            "Providers additional details in case the data is not cached.",
           parameters: {
             type: "object",
             properties: {
@@ -181,9 +191,8 @@ QUESTION: ${complete}
             ?.function_call
         ) {
           if (!dispatcher.isFinalized()) {
-            // dispatcher.addUtterance("Give me a moment to think.");
-            // dispatcher.finalize();
-            const name = (choice.delta as { function_call?: { name: string } }).function_call.name;
+            const name = (choice.delta as { function_call?: { name: string } })
+              .function_call.name;
 
             switch (name) {
               case "answer_difficult_question":
@@ -220,7 +229,9 @@ QUESTION: ${complete}
     );
 
     if (!dispatcher.isFinalized()) {
-      console.log("!!!! This is a bug. Unfinalized dispatcher after response completed.");
+      console.log(
+        "!!!! This is a bug. Unfinalized dispatcher after response completed."
+      );
       dispatcher.finalize();
     }
 
@@ -237,8 +248,15 @@ QUESTION: ${complete}
             const parameters = SensorSchema.parse(
               JSON.parse(response.function_call.arguments)
             );
-            // dispatcher.addChild(useSensors(parameters));
-            useSensors(parameters);
+            dispatcher.addChild(
+              useSensors(
+                parameters,
+                chat,
+                activity,
+                dispatcher.frozenConversation,
+                latentConversation
+              )
+            );
             break;
           default:
             throw new Error(
