@@ -37,6 +37,17 @@ canned_responses["sensors_7"] = "I will use my sensors to figure out the answer.
 canned_responses["sensors_8"] = "I will use my sensors to find the solution."
 canned_responses["sensors_9"] = "My sensors will help me find the solution."
 
+canned_responses["consult_0"] = "I need to consult my encyclopedia."
+canned_responses["consult_1"] = "I will consult my encyclopedia."
+canned_responses["consult_2"] = "My encyclopedia will help me find the answer."
+canned_responses["consult_3"] = "Encyclopedias are elucidating, I will consult mine."
+canned_responses["consult_4"] = "I will consult my encyclopedia to find the answer."
+canned_responses["consult_5"] = "An encyclopedia may help me find the answer, I will consult mine."
+canned_responses["consult_6"] = "I will consult my encyclopedia to find the solution."
+canned_responses["consult_7"] = "An encyclopedia may guide me to the solution, I will consult mine."
+canned_responses["consult_8"] = "I will consult my encyclopedia to help me find the solution."
+canned_responses["consult_9"] = "I have a good encyclopedia, I will consult it to find the solution."
+
 for response in canned_responses:
   if not os.path.exists(f"{canned_responses_dir}/{response}.wav"):
     tts.tts_to_file(canned_responses[response], file_path=f"{canned_responses_dir}/{response}.wav", emotion="Neutral")

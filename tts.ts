@@ -18,11 +18,13 @@ const canned_responses_dir = "canned_responses";
 export enum CannedResponse {
   Think = "think",
   Sensors = "sensors",
+  Consult = "consult",
 }
 
 const cannedResponses: Record<CannedResponse, string> = {
   [CannedResponse.Think]: "I need a moment to think.",
   [CannedResponse.Sensors]: "I need to check my sensors.",
+  [CannedResponse.Consult]: "I need to consult my encyclopedia.",
 };
 
 // FIXME: Problematic global state

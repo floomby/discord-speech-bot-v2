@@ -60,7 +60,9 @@ const finalSystem = (
   latentConversation: CondensedConversation,
   activity: LoadedPackage | null
 ) => {
-  const ret = `You are ${bot_name} a discord bot in a voice channel know for being concise with your responses.
+  const ret = `You are ${bot_name} a discord bot in a voice channel.
+
+Beware! some of the questions are tricky, don't be afraid to think about them.
 
 You have sensors that are connected to the discord channel and the games and activities that happen here.
 
@@ -77,7 +79,9 @@ Cached sensor data is available so that you don't have to use the sensors for ev
 
 Use the cached sensor data if you can.
 
-The following is the conversation that has occurred so far:${
+You should use your encyclopedia if you are even a little unsure of the answer.
+
+The following is the conversation that has occurred so far ======${
     !!latentConversation.synopsis
       ? `\n\n[Hint: ${latentConversation.synopsis}]`
       : ""
@@ -85,12 +89,14 @@ The following is the conversation that has occurred so far:${
 
 ${conversationText}
 
+======
+
 Skip two lines between every sentence in your response.
 
 Be concise with your responses.
 
 `;
-  console.log(ret);
+  // console.log(ret);
 
   return ret;
 };
@@ -104,16 +110,35 @@ const finalPrompt = async (
   latentConversation: CondensedConversation,
   activity: LoadedPackage | null
 ) => {
+  const functions = [];
+
+  if (activity) {
+    functions.push({
+      name: "consult_encyclopedia",
+      description: `Consults the ${activity.name} encyclopedia.`,
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "What to query the encyclopedia for.",
+          },
+        },
+        required: ["query"],
+      },
+    });
+  }
+
   try {
     const chat = createChat({
       apiKey: process.env.OPENAI_API_KEY,
       model: "gpt-3.5-turbo-0613",
       functionCall: "auto",
       functions: [
+        ...functions,
         {
           name: "answer_difficult_question",
-          description:
-            "Providers answers to questions which require more context, real time data, or external resources.",
+          description: `Puts you (${bot_name} bot) into thinking mode to answer hard questions`,
           parameters: {
             type: "object",
             properties: {
@@ -157,22 +182,6 @@ const finalPrompt = async (
         activity
       ),
     });
-    //     chat.addMessage({
-    //       role: "user",
-    //       content: `When you respond, skip two lines in between each sentence.
-
-    // Do not say anymore than you need to when you respond.
-
-    // `,
-    //     });
-    //     chat.addMessage({
-    //       role: "assistant",
-    //       content: `I am ${bot_name} bot.
-
-    // I understand that I need to skip two lines in between each sentence when I respond.
-
-    // `,
-    //     });
 
     let acm = "";
 
@@ -201,6 +210,10 @@ QUESTION: ${complete}
                 break;
               case "use_sensors":
                 dispatcher.playCannedResponse(CannedResponse.Sensors);
+                dispatcher.finalize();
+                break;
+              case "consult_encyclopedia":
+                dispatcher.playCannedResponse(CannedResponse.Consult);
                 dispatcher.finalize();
                 break;
             }
@@ -258,6 +271,10 @@ QUESTION: ${complete}
               )
             );
             break;
+          case "consult_encyclopedia":
+            const query = JSON.parse(response.function_call.arguments).query;
+            dispatcher.addChild(answerQuestion(query, activity));
+            break;
           default:
             throw new Error(
               `Unknown function call: ${response.function_call.name}`
@@ -289,12 +306,14 @@ const summarizeConversation = async (
 
 const answerQuestion = async (
   question: string,
-  activity: LoadedPackage | null
+  activity: LoadedPackage | null,
+  forceRetriever = false
 ) => {
   let showActivityHint = false;
 
   if (activity) {
-    showActivityHint = await isQuestionAboutActivity(question, activity);
+    showActivityHint =
+      (await isQuestionAboutActivity(question, activity)) || forceRetriever;
   }
 
   let answer: TTSDispatcher | undefined;
