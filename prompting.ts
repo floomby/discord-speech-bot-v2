@@ -129,70 +129,102 @@ const finalPrompt = async (
     });
   }
 
-  try {
-    const chat = createChat({
-      apiKey: process.env.OPENAI_API_KEY,
-      model: "gpt-3.5-turbo-0613",
-      functionCall: "auto",
-      functions: [
-        ...functions,
-        {
-          name: "answer_difficult_question",
-          description: `Puts you (${bot_name} bot) into thinking mode to answer hard questions`,
-          parameters: {
-            type: "object",
-            properties: {
-              question: {
-                type: "string",
-                description: "The question to answer.",
-              },
+  const chat = createChat({
+    apiKey: process.env.OPENAI_API_KEY,
+    model: "gpt-3.5-turbo-0613",
+    functionCall: "auto",
+    functions: [
+      ...functions,
+      {
+        name: "answer_difficult_question",
+        description: `Puts you (${bot_name} bot) into thinking mode to answer hard questions`,
+        parameters: {
+          type: "object",
+          properties: {
+            question: {
+              type: "string",
+              description: "The question to answer.",
             },
-            required: ["question"],
           },
+          required: ["question"],
         },
-        {
-          name: "use_sensors",
-          description:
-            "Providers additional details in case the data is not cached.",
-          parameters: {
-            type: "object",
-            properties: {
-              query: {
-                type: "string",
-                description: "What to query the sensors for.",
-              },
-              which_sensor: {
-                type: "string",
-                enum: ["activity", "channel", "past"],
-                description: "Which sensor to query.",
-              },
+      },
+      {
+        name: "use_sensors",
+        description:
+          "Providers additional details in case the data is not cached.",
+        parameters: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "What to query the sensors for.",
             },
-            required: ["query", "which_sensor"],
+            which_sensor: {
+              type: "string",
+              enum: ["activity", "channel", "past_conversation"],
+              description: "Which sensor to query.",
+            },
           },
+          required: ["query", "which_sensor"],
         },
-      ],
-    });
+      },
+    ],
+    messages: [
+      {
+        role: "system",
+        content: finalSystem(
+          conversationContext,
+          conversationText,
+          latentConversation,
+          activity
+        ),
+      },
+      {
+        role: "user",
+        content:
+          "When you reply it is very important that you skip two lines between every sentence in your response.\n\nDo you understand?",
+      },
+      {
+        role: "assistant",
+        content:
+          "Yes, I understand.\n\nWhen I reply I will skip two lines between every sentence in my response.",
+      },
+    ],
+  });
 
-    chat.addMessage({
-      role: "system",
-      content: finalSystem(
-        conversationContext,
-        conversationText,
-        latentConversation,
-        activity
-      ),
-    });
-
-    let acm = "";
-
-    const response = await chat.sendMessage(
-      `Respond question asked by ${userName}.
+  await sendChatMessage(
+    chat,
+    `Respond question asked by ${userName}.
 
 ======
 QUESTION: ${complete}
 ======
 
 `,
+    dispatcher,
+    activity,
+    latentConversation
+  );
+};
+
+const sendChatMessage = async (
+  chat: Chat,
+  content: string,
+  dispatcher: TTSDispatcher,
+  activity: LoadedPackage | null,
+  latentConversation: CondensedConversation,
+  options?: {
+    suppressCannedResponse?: boolean;
+    forceUserFacingResponse?: boolean;
+    functionName?: string;
+  }
+) => {
+  try {
+    let acm = "";
+
+    const response = await chat.sendMessage(
+      content,
       (message) => {
         const choice = message.message.choices[0];
         if (
@@ -203,19 +235,23 @@ QUESTION: ${complete}
             const name = (choice.delta as { function_call?: { name: string } })
               .function_call.name;
 
-            switch (name) {
-              case "answer_difficult_question":
-                dispatcher.playCannedResponse(CannedResponse.Think);
-                dispatcher.finalize();
-                break;
-              case "use_sensors":
-                dispatcher.playCannedResponse(CannedResponse.Sensors);
-                dispatcher.finalize();
-                break;
-              case "consult_encyclopedia":
-                dispatcher.playCannedResponse(CannedResponse.Consult);
-                dispatcher.finalize();
-                break;
+            if (options?.suppressCannedResponse !== true) {
+              switch (name) {
+                case "answer_difficult_question":
+                  dispatcher.playCannedResponse(CannedResponse.Think);
+                  dispatcher.finalize();
+                  break;
+                case "use_sensors":
+                  dispatcher.playCannedResponse(CannedResponse.Sensors);
+                  dispatcher.finalize();
+                  break;
+                case "consult_encyclopedia":
+                  dispatcher.playCannedResponse(CannedResponse.Consult);
+                  dispatcher.finalize();
+                  break;
+              }
+            } else {
+              dispatcher.finalize();
             }
           }
         } else {
@@ -238,7 +274,9 @@ QUESTION: ${complete}
             }
           }
         }
-      }
+      },
+      options?.functionName,
+      { functionCall: options?.forceUserFacingResponse ? "none" : "auto" }
     );
 
     if (!dispatcher.isFinalized()) {
@@ -365,8 +403,10 @@ const isQuestionAboutActivity = async (
 export {
   loadedPackages,
   init as initPrompting,
+  sendChatMessage,
   interimPrompt,
   finalPrompt,
   summarizeConversation,
   isQuestionAboutActivity as isQuestionStandalone,
+  executor as informationAgent,
 };
