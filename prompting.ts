@@ -170,27 +170,25 @@ const finalPrompt = async (
         },
       },
     ],
-    messages: [
-      {
-        role: "system",
-        content: finalSystem(
-          conversationContext,
-          conversationText,
-          latentConversation,
-          activity
-        ),
-      },
-      {
-        role: "user",
-        content:
-          "When you reply it is very important that you skip two lines between every sentence in your response.\n\nDo you understand?",
-      },
-      {
-        role: "assistant",
-        content:
-          "Yes, I understand.\n\nWhen I reply I will skip two lines between every sentence in my response.",
-      },
-    ],
+  });
+  chat.addMessage({
+    role: "system",
+    content: finalSystem(
+      conversationContext,
+      conversationText,
+      latentConversation,
+      activity
+    ),
+  });
+  chat.addMessage({
+    role: "user",
+    content:
+      "When you reply it is very important that you skip two lines between every sentence in your response.\n\nDo you understand?",
+  });
+  chat.addMessage({
+    role: "assistant",
+    content:
+      "Yes, I understand.\n\nWhen I reply I will skip two lines between every sentence in my response.",
   });
 
   await sendChatMessage(
@@ -407,6 +405,6 @@ export {
   interimPrompt,
   finalPrompt,
   summarizeConversation,
-  isQuestionAboutActivity as isQuestionStandalone,
+  isQuestionAboutActivity,
   executor as informationAgent,
 };

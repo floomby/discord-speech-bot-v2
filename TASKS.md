@@ -2,8 +2,8 @@
 
 ### Immediate Tasks
 
+- Rewrite the zero shot react agent from scratch so that I have more control over the code
 - Finish sensors at least minimally working
-- Initial prompt is failing to use the function sometimes (more functions?), also the sentence line skipping is not working well
 - Work on testing coverage (specifically chat context referencing)
 
 ### Medium Term Tasks

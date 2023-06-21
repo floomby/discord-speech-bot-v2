@@ -2,7 +2,7 @@ import { describe } from "mocha";
 import {
   finalPrompt,
   initPrompting,
-  isQuestionStandalone,
+  isQuestionAboutActivity,
   loadedPackages,
 } from "../prompting";
 import dotenv from "dotenv";
@@ -49,19 +49,19 @@ describe("Testing for all prompts", () => {
   // it("Tests if the standalone prompt is working", async () => {
   //   expect(activity).to.exist;
 
-  //   const result0 = await isQuestionStandalone(
+  //   const result0 = await isQuestionAboutActivity(
   //     "what does the plasma shrimp do",
   //     activity
   //   );
   //   expect(result0).to.be.true;
 
-  //   const result1 = await isQuestionStandalone(
+  //   const result1 = await isQuestionAboutActivity(
   //     "what is the weather like today",
   //     activity
   //   );
   //   expect(result1).to.be.false;
 
-  //   const result2 = await isQuestionStandalone(
+  //   const result2 = await isQuestionAboutActivity(
   //     "how should I make a pizza",
   //     activity
   //   );
