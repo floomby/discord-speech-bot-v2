@@ -98,6 +98,13 @@ export class CondensedConversation {
     clone.dirty = this.dirty;
     return clone;
   }
+
+  sense() {
+    return {
+      previous_synopsis: this.synopsis || undefined,
+      conversation: this.conversation,
+    }
+  }
 }
 
 // FIXME: Problematic global state

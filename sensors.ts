@@ -1,12 +1,12 @@
 import { z } from "zod";
-import { informationAgent, type Chat } from "./prompting";
+import { informationAgent, type Chat, sendChatMessage } from "./prompting";
 import { TTSDispatcher } from "./tts";
 import { LoadedPackage } from "./packageLoader";
 import { CondensedConversation } from "./conversation";
 
 export const SensorSchema = z.object({
   query: z.string(),
-  which_sensor: z.enum(["activity", "channel", "past_conversation"]),
+  which_sensor: z.enum(["activity", "past_conversation"]),
 });
 
 const useSensors = async (
@@ -20,24 +20,43 @@ const useSensors = async (
 
   console.log(`Querying ${which_sensor} sensor for ${query}`);
 
+  console.log("Activity is", activity.name);
+
+  const ret = new TTSDispatcher(conversation, activity);
+
   try {
     switch (which_sensor) {
       case "activity":
         const agentAnswer = await informationAgent.call({
-          input: `Provider a description of ${activity.name}`,
+          input: `What is ${activity.name} about?`,
         });
-        chat.sendMessage(JSON.stringify({ description: agentAnswer.output }));
+
+        console.log("Got agent answer", agentAnswer);
+        await sendChatMessage(
+          chat,
+          JSON.stringify({ description: agentAnswer.output }),
+          ret,
+          activity,
+          latentConversation,
+          { functionName: "use_sensors" }
+        );
         break;
-      case "channel":
-        throw new Error("Channel sensor not implemented");
       case "past_conversation":
-        throw new Error("Past conversation sensor not implemented");
+        await sendChatMessage(
+          chat,
+          JSON.stringify(latentConversation.sense(), null, 2),
+          ret,
+          activity,
+          latentConversation,
+          { functionName: "use_sensors" }
+        );
     }
   } catch (e) {
     console.error("Error querying sensor:", e);
+    ret.hasErrored = true;
   }
 
-  return new TTSDispatcher(conversation, activity);
+  return ret;
 };
 
 export { useSensors };

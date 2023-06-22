@@ -155,6 +155,12 @@ const commands = [
       },
     ],
   },
+  {
+    name: "dump_conversation_sensor",
+    description:
+      "Dump the conversation as if using the conversation sensor (useful for debugging conversation)",
+    options: [],
+  }
 ];
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -206,6 +212,11 @@ client.on("interactionCreate", async (interaction) => {
 
     await interaction.reply({
       content: `Said \`${text}\``,
+      ephemeral: true,
+    });
+  } else if (commandName === "dump_conversation_sensor") {
+    await interaction.reply({
+      content: JSON.stringify(latentConversation.sense(), null, 2),
       ephemeral: true,
     });
   }

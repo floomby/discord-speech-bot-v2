@@ -21,7 +21,7 @@ export type Chat = ReturnType<typeof createChat>;
 // FIXME: Problematic global state
 const loadedPackages: LoadedPackage[] = [];
 
-let executor:
+let informationAgent:
   | Awaited<ReturnType<typeof initializeAgentExecutorWithOptions>>
   | undefined;
 
@@ -41,7 +41,7 @@ const init = async () => {
     ...loadedPackages.map((p) => p.tool),
   ];
 
-  executor = await initializeAgentExecutorWithOptions(tools, model, {
+  informationAgent = await initializeAgentExecutorWithOptions(tools, model, {
     agentType: "zero-shot-react-description",
   });
 };
@@ -162,7 +162,7 @@ const finalPrompt = async (
             },
             which_sensor: {
               type: "string",
-              enum: ["activity", "channel", "past_conversation"],
+              enum: ["activity", "past_conversation"],
               description: "Which sensor to query.",
             },
           },
@@ -354,7 +354,7 @@ const answerQuestion = async (
 
   let answer: TTSDispatcher | undefined;
   try {
-    const agentAnswer = await executor.call({
+    const agentAnswer = await informationAgent.call({
       input: `${
         showActivityHint
           ? `[HINT: This question may be about ${activity.name}] `
@@ -406,5 +406,5 @@ export {
   finalPrompt,
   summarizeConversation,
   isQuestionAboutActivity,
-  executor as informationAgent,
+  informationAgent,
 };
