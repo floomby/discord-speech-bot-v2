@@ -46,10 +46,6 @@ const init = async () => {
   });
 };
 
-const interimPrompt = (fragments: string[]) => {
-  // TODO? implement if we want to pre-run on un-finalized asr
-};
-
 export type ConversationContext = {
   usersInChannel: string[];
 };
@@ -402,7 +398,6 @@ export {
   loadedPackages,
   init as initPrompting,
   sendChatMessage,
-  interimPrompt,
   finalPrompt,
   summarizeConversation,
   isQuestionAboutActivity,

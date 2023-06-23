@@ -23,7 +23,6 @@ import {
 import { QuiescenceMonitor } from "./quiescenceMonitor";
 import {
   initPrompting,
-  interimPrompt,
   finalPrompt,
   type ConversationContext,
   loadedPackages,
