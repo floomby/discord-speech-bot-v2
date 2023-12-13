@@ -1,4 +1,4 @@
-## New Discord Bot Project
+## Discord Voice Assistant Bot
 
 ### Getting Started
 
@@ -12,21 +12,20 @@
 
 ### Creating Packages
 
-- TODO: Document this process
+- Poorly documented, but you can reference [this notebook](https://github.com/floomby/fandom-wiki-packager)
 
 ### Short Term Roadmap
 
 - Context detection
 - Multi guild support
 - Work on writing some more regression tests against the prompts to get better coverage
-- fandom com scraper/packager notebook
 
 ### Notes / Thoughts
 
 - I would like to explore other tts options that support local models with emotions.
 - Assuming we keep using coqui-tts, I will fix the patch so that it properly allows bypassing the sentencizer.
 - It might remove a small amount of latency to not use the filesystem to get the tts generation results to the bot. (not worth the effort until we know that we are for sure using coqui-tts)
-- If you want to build the old whisper module you can with the following
+- If you want to build with local asr using the whisper module you can with the following
   - Build whisper.cpp then place `libwhisper.so` and `whisper.h` in the `deps` folder. You should build with cuda support for the best results.
   - Put `ggml-base.en.bin` in the models folder. (this file can be downloaded with a script in the whisper.cpp repo)
   - Build the addon with `node-gyp build`
